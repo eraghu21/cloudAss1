@@ -14,45 +14,41 @@ PASSWORD = st.secrets["ENC_KEY"]
 
 st.set_page_config(page_title="Online Quiz", page_icon="🎓")
 
-# ---------------- DECRYPT FUNCTION ----------------
+# ---------------- DECRYPT ----------------
 def decrypt_file(enc_file, output_file):
-    if not os.path.exists(enc_file):
-        st.error(f"{enc_file} not found in repository.")
-        st.stop()
     pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
 
 # ---------------- LOAD STUDENTS ----------------
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
 
-    # Read 2nd row as header
+    # header on 2nd row
     df = pd.read_excel("students.xlsx", header=1)
     os.remove("students.xlsx")
 
-    df.columns = df.columns.astype(str).str.strip()
+    df.columns = df.columns.str.strip()
 
     df = df.rename(columns={
         "reg_no": "RegNo",
         "Student Name": "Name",
+        "Section": "Section",
         "Dept": "Dept",
-        "Year": "Year",
-        "Section": "Section"
+        "Year": "Year"
     })
 
-    df = df[["RegNo", "Name", "Dept", "Year", "Section"]]
     df["RegNo"] = df["RegNo"].astype(str).str.strip()
 
-    return df
+    return df[["RegNo", "Name", "Section", "Dept", "Year"]]
 
 # ---------------- LOAD QUESTIONS ----------------
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
 
-    # Read 2nd row as header
-    df = pd.read_excel("questions.xlsx", header=1)
+    # header on 1st row
+    df = pd.read_excel("questions.xlsx", header=0)
     os.remove("questions.xlsx")
 
-    df.columns = df.columns.astype(str).str.strip()
+    df.columns = df.columns.str.strip()
 
     df = df.rename(columns={
         "Question": "Question",
@@ -63,24 +59,23 @@ def load_questions():
         "Right Answer": "Correct"
     })
 
-    # Convert Option1 → A etc.
-    def convert_answer(ans):
-        if ans == "Option1":
-            return "A"
-        elif ans == "Option2":
-            return "B"
-        elif ans == "Option3":
-            return "C"
-        elif ans == "Option4":
-            return "D"
-        return ans
+    # Convert Option1 -> A etc.
+    mapping = {
+        "Option1": "A",
+        "Option2": "B",
+        "Option3": "C",
+        "Option4": "D"
+    }
 
-    df["Correct"] = df["Correct"].apply(convert_answer)
+    df["Correct"] = df["Correct"].map(mapping)
 
-    return df
+    return df[["Question", "A", "B", "C", "D", "Correct"]]
 
-# ---------------- LOAD PROGRESS ----------------
+# ---------------- PROGRESS ----------------
 def load_progress():
+    if not os.path.exists("progress.enc"):
+        return {}
+
     decrypt_file("progress.enc", "progress.json")
     with open("progress.json", "r") as f:
         data = json.load(f)
@@ -99,7 +94,6 @@ def generate_certificate(student, score, total):
     file_name = f"{student['RegNo']}_certificate.pdf"
     doc = SimpleDocTemplate(file_name)
     elements = []
-
     styles = getSampleStyleSheet()
 
     elements.append(Paragraph("<b>Certificate of Achievement</b>", styles["Title"]))
@@ -110,8 +104,8 @@ def generate_certificate(student, score, total):
     Registration Number: {student['RegNo']}<br/>
     Department: {student['Dept']}<br/>
     Year: {student['Year']} | Section: {student['Section']}<br/><br/>
-    has successfully completed the Online Quiz<br/><br/>
-    Score Obtained: <b>{score} / {total}</b><br/><br/>
+    has successfully completed the Online Quiz.<br/><br/>
+    Score: <b>{score}/{total}</b><br/><br/>
     Date: {datetime.today().strftime('%d-%m-%Y')}
     """
 
@@ -120,7 +114,7 @@ def generate_certificate(student, score, total):
 
     return file_name
 
-# ---------------- MAIN APP ----------------
+# ---------------- MAIN ----------------
 st.title("🎓 Online Quiz & Certificate System")
 
 students = load_students()
