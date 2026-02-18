@@ -8,110 +8,78 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from datetime import datetime
 
-# ------------------ CONFIG ------------------
-
+# ---------------- CONFIG ----------------
 bufferSize = 64 * 1024
 PASSWORD = st.secrets["ENC_KEY"]
 
 st.set_page_config(page_title="Online Quiz", page_icon="🎓")
 
-# ------------------ DECRYPT FUNCTION ------------------
-
+# ---------------- DECRYPT FUNCTION ----------------
 def decrypt_file(enc_file, output_file):
     if not os.path.exists(enc_file):
         st.error(f"{enc_file} not found in repository.")
         st.stop()
     pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
 
-# ------------------ LOAD STUDENTS ------------------
-
+# ---------------- LOAD STUDENTS ----------------
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
-    df = pd.read_excel("students.xlsx", header=0)
+
+    # Read 2nd row as header
+    df = pd.read_excel("students.xlsx", header=1)
     os.remove("students.xlsx")
 
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.astype(str).str.strip()
 
-    rename_map = {}
-    for col in df.columns:
-        col_lower = col.lower()
-        if "reg" in col_lower:
-            rename_map[col] = "RegNo"
-        elif "name" in col_lower:
-            rename_map[col] = "Name"
-        elif "dept" in col_lower:
-            rename_map[col] = "Dept"
-        elif "year" in col_lower:
-            rename_map[col] = "Year"
-        elif "section" in col_lower:
-            rename_map[col] = "Section"
+    df = df.rename(columns={
+        "reg_no": "RegNo",
+        "Student Name": "Name",
+        "Dept": "Dept",
+        "Year": "Year",
+        "Section": "Section"
+    })
 
-    df = df.rename(columns=rename_map)
-
-    required = ["RegNo", "Name", "Dept", "Year", "Section"]
-    for col in required:
-        if col not in df.columns:
-            st.error(f"Missing column in Students file: {col}")
-            st.stop()
-
+    df = df[["RegNo", "Name", "Dept", "Year", "Section"]]
     df["RegNo"] = df["RegNo"].astype(str).str.strip()
 
     return df
 
-# ------------------ LOAD QUESTIONS ------------------
-
+# ---------------- LOAD QUESTIONS ----------------
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
-    df = pd.read_excel("questions.xlsx", header=0)
+
+    # Read 2nd row as header
+    df = pd.read_excel("questions.xlsx", header=1)
     os.remove("questions.xlsx")
 
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.astype(str).str.strip()
 
-    rename_map = {}
-    for col in df.columns:
-        col_lower = col.lower()
-
-        if "question" in col_lower:
-            rename_map[col] = "Question"
-        elif "option1" in col_lower:
-            rename_map[col] = "A"
-        elif "option2" in col_lower:
-            rename_map[col] = "B"
-        elif "option3" in col_lower:
-            rename_map[col] = "C"
-        elif "option4" in col_lower:
-            rename_map[col] = "D"
-        elif "right" in col_lower or "correct" in col_lower:
-            rename_map[col] = "Correct"
-
-    df = df.rename(columns=rename_map)
-
-    required = ["Question", "A", "B", "C", "D", "Correct"]
-    for col in required:
-        if col not in df.columns:
-            st.error(f"Missing column in Questions file: {col}")
-            st.stop()
+    df = df.rename(columns={
+        "Question": "Question",
+        "Option1": "A",
+        "Option2": "B",
+        "Option3": "C",
+        "Option4": "D",
+        "Right Answer": "Correct"
+    })
 
     # Convert Option1 → A etc.
     def convert_answer(ans):
-        if isinstance(ans, str):
-            ans = ans.strip().lower()
-            if ans == "option1":
-                return "A"
-            elif ans == "option2":
-                return "B"
-            elif ans == "option3":
-                return "C"
-            elif ans == "option4":
-                return "D"
+        if ans == "Option1":
+            return "A"
+        elif ans == "Option2":
+            return "B"
+        elif ans == "Option3":
+            return "C"
+        elif ans == "Option4":
+            return "D"
         return ans
 
     df["Correct"] = df["Correct"].apply(convert_answer)
 
     return df
 
-# ------------------ LOAD PROGRESS ------------------
-
+# ---------------- LOAD PROGRESS ----------------
 def load_progress():
     decrypt_file("progress.enc", "progress.json")
     with open("progress.json", "r") as f:
@@ -126,8 +94,7 @@ def save_progress(data):
     pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
     os.remove("progress.json")
 
-# ------------------ CERTIFICATE ------------------
-
+# ---------------- CERTIFICATE ----------------
 def generate_certificate(student, score, total):
     file_name = f"{student['RegNo']}_certificate.pdf"
     doc = SimpleDocTemplate(file_name)
@@ -153,8 +120,7 @@ def generate_certificate(student, score, total):
 
     return file_name
 
-# ------------------ MAIN APP ------------------
-
+# ---------------- MAIN APP ----------------
 st.title("🎓 Online Quiz & Certificate System")
 
 students = load_students()
@@ -172,7 +138,7 @@ if regno:
     else:
         student = students[students["RegNo"] == regno].iloc[0].to_dict()
 
-        # Already completed?
+        # Already completed
         if regno in progress and progress[regno]["completed"]:
 
             st.warning("⚠ You have already completed the quiz.")
