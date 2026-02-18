@@ -8,14 +8,18 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from datetime import datetime
 
+# ------------------ CONFIG ------------------
+
 bufferSize = 64 * 1024
 PASSWORD = st.secrets["ENC_KEY"]
 
-# ------------------ SAFE DECRYPT ------------------
+st.set_page_config(page_title="Online Quiz", page_icon="🎓")
+
+# ------------------ DECRYPT FUNCTION ------------------
 
 def decrypt_file(enc_file, output_file):
     if not os.path.exists(enc_file):
-        st.error(f"{enc_file} not found in app directory.")
+        st.error(f"{enc_file} not found in repository.")
         st.stop()
     pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
 
@@ -23,17 +27,34 @@ def decrypt_file(enc_file, output_file):
 
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
-    df = pd.read_excel("students.xlsx")
+    df = pd.read_excel("students.xlsx", header=0)
     os.remove("students.xlsx")
 
-    # Rename columns automatically
-    df = df.rename(columns={
-        "reg_no": "RegNo",
-        "Student Name": "Name",
-        "Dept": "Dept",
-        "Year": "Year",
-        "Section": "Section"
-    })
+    df.columns = df.columns.str.strip()
+
+    rename_map = {}
+    for col in df.columns:
+        col_lower = col.lower()
+        if "reg" in col_lower:
+            rename_map[col] = "RegNo"
+        elif "name" in col_lower:
+            rename_map[col] = "Name"
+        elif "dept" in col_lower:
+            rename_map[col] = "Dept"
+        elif "year" in col_lower:
+            rename_map[col] = "Year"
+        elif "section" in col_lower:
+            rename_map[col] = "Section"
+
+    df = df.rename(columns=rename_map)
+
+    required = ["RegNo", "Name", "Dept", "Year", "Section"]
+    for col in required:
+        if col not in df.columns:
+            st.error(f"Missing column in Students file: {col}")
+            st.stop()
+
+    df["RegNo"] = df["RegNo"].astype(str).str.strip()
 
     return df
 
@@ -41,28 +62,48 @@ def load_students():
 
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
-    df = pd.read_excel("questions.xlsx")
+    df = pd.read_excel("questions.xlsx", header=0)
     os.remove("questions.xlsx")
 
-    # Rename columns
-    df = df.rename(columns={
-        "Option1": "A",
-        "Option2": "B",
-        "Option3": "C",
-        "Option4": "D",
-        "Right Answer": "Correct"
-    })
+    df.columns = df.columns.str.strip()
 
-    # Convert Right Answer (Option1) → A/B/C/D
+    rename_map = {}
+    for col in df.columns:
+        col_lower = col.lower()
+
+        if "question" in col_lower:
+            rename_map[col] = "Question"
+        elif "option1" in col_lower:
+            rename_map[col] = "A"
+        elif "option2" in col_lower:
+            rename_map[col] = "B"
+        elif "option3" in col_lower:
+            rename_map[col] = "C"
+        elif "option4" in col_lower:
+            rename_map[col] = "D"
+        elif "right" in col_lower or "correct" in col_lower:
+            rename_map[col] = "Correct"
+
+    df = df.rename(columns=rename_map)
+
+    required = ["Question", "A", "B", "C", "D", "Correct"]
+    for col in required:
+        if col not in df.columns:
+            st.error(f"Missing column in Questions file: {col}")
+            st.stop()
+
+    # Convert Option1 → A etc.
     def convert_answer(ans):
-        if ans == "Option1":
-            return "A"
-        elif ans == "Option2":
-            return "B"
-        elif ans == "Option3":
-            return "C"
-        elif ans == "Option4":
-            return "D"
+        if isinstance(ans, str):
+            ans = ans.strip().lower()
+            if ans == "option1":
+                return "A"
+            elif ans == "option2":
+                return "B"
+            elif ans == "option3":
+                return "C"
+            elif ans == "option4":
+                return "D"
         return ans
 
     df["Correct"] = df["Correct"].apply(convert_answer)
@@ -93,16 +134,17 @@ def generate_certificate(student, score, total):
     elements = []
 
     styles = getSampleStyleSheet()
+
     elements.append(Paragraph("<b>Certificate of Achievement</b>", styles["Title"]))
     elements.append(Spacer(1, 0.5 * inch))
 
     text = f"""
     This is to certify that <b>{student['Name']}</b><br/><br/>
-    RegNo: {student['RegNo']}<br/>
+    Registration Number: {student['RegNo']}<br/>
     Department: {student['Dept']}<br/>
     Year: {student['Year']} | Section: {student['Section']}<br/><br/>
     has successfully completed the Online Quiz<br/><br/>
-    Score: <b>{score} / {total}</b><br/><br/>
+    Score Obtained: <b>{score} / {total}</b><br/><br/>
     Date: {datetime.today().strftime('%d-%m-%Y')}
     """
 
@@ -111,9 +153,9 @@ def generate_certificate(student, score, total):
 
     return file_name
 
-# ------------------ STREAMLIT APP ------------------
+# ------------------ MAIN APP ------------------
 
-st.title("Online Quiz & Certificate System")
+st.title("🎓 Online Quiz & Certificate System")
 
 students = load_students()
 questions = load_questions()
@@ -123,26 +165,33 @@ regno = st.text_input("Enter Registration Number")
 
 if regno:
 
-    student = students[students["RegNo"].astype(str) == regno]
+    regno = regno.strip()
 
-    if student.empty:
+    if regno not in students["RegNo"].values:
         st.error("Invalid Registration Number")
     else:
-        student_data = student.iloc[0].to_dict()
+        student = students[students["RegNo"] == regno].iloc[0].to_dict()
 
+        # Already completed?
         if regno in progress and progress[regno]["completed"]:
-            st.warning("You have already completed the quiz.")
+
+            st.warning("⚠ You have already completed the quiz.")
+
             cert_file = generate_certificate(
-                student_data,
+                student,
                 progress[regno]["score"],
                 progress[regno]["total"]
             )
+
             with open(cert_file, "rb") as f:
-                st.download_button("Download Certificate", f, file_name=cert_file)
+                st.download_button(
+                    "📥 Download Certificate",
+                    f,
+                    file_name=cert_file
+                )
 
         else:
-
-            st.success(f"Welcome {student_data['Name']}")
+            st.success(f"Welcome {student['Name']}")
 
             answers = {}
 
@@ -154,6 +203,7 @@ if regno:
                 )
 
             if st.button("Submit Quiz"):
+
                 score = 0
 
                 for i, row in questions.iterrows():
@@ -169,9 +219,13 @@ if regno:
 
                 save_progress(progress)
 
-                st.success(f"Your Score: {score}/{len(questions)}")
+                st.success(f"✅ Your Score: {score}/{len(questions)}")
 
-                cert_file = generate_certificate(student_data, score, len(questions))
+                cert_file = generate_certificate(student, score, len(questions))
 
                 with open(cert_file, "rb") as f:
-                    st.download_button("Download Certificate", f, file_name=cert_file)
+                    st.download_button(
+                        "📥 Download Certificate",
+                        f,
+                        file_name=cert_file
+                    )
