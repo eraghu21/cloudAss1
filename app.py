@@ -14,7 +14,7 @@ PASSWORD = st.secrets["ENC_KEY"]
 
 st.set_page_config(page_title="Online Quiz", page_icon="🎓")
 
-# ---------------- DECRYPT ----------------
+# ---------------- DECRYPT FUNCTION ----------------
 def decrypt_file(enc_file, output_file):
     pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
 
@@ -22,7 +22,7 @@ def decrypt_file(enc_file, output_file):
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
 
-    # header on 2nd row
+    # Header is on 2nd row
     df = pd.read_excel("students.xlsx", header=1)
     os.remove("students.xlsx")
 
@@ -44,7 +44,7 @@ def load_students():
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
 
-    # header on 1st row
+    # Header is on 1st row
     df = pd.read_excel("questions.xlsx", header=0)
     os.remove("questions.xlsx")
 
@@ -114,7 +114,7 @@ def generate_certificate(student, score, total):
 
     return file_name
 
-# ---------------- MAIN ----------------
+# ---------------- MAIN APP ----------------
 st.title("🎓 Online Quiz & Certificate System")
 
 students = load_students()
@@ -132,7 +132,7 @@ if regno:
     else:
         student = students[students["RegNo"] == regno].iloc[0].to_dict()
 
-        # Already completed
+        # If already completed
         if regno in progress and progress[regno]["completed"]:
 
             st.warning("⚠ You have already completed the quiz.")
@@ -156,36 +156,45 @@ if regno:
             answers = {}
 
             for i, row in questions.iterrows():
+                st.write(f"**Q{i+1}. {row['Question']}**")
+
                 answers[i] = st.radio(
-                    row["Question"],
+                    "",
                     [row["A"], row["B"], row["C"], row["D"]],
-                    key=i
+                    key=i,
+                    index=None
                 )
 
             if st.button("Submit Quiz"):
 
-                score = 0
+                # Check unanswered
+                unanswered = [i for i in answers if answers[i] is None]
 
-                for i, row in questions.iterrows():
-                    correct_option = row[row["Correct"]]
-                    if answers[i] == correct_option:
-                        score += 1
+                if unanswered:
+                    st.error("⚠ Please answer all questions before submitting.")
+                else:
+                    score = 0
 
-                progress[regno] = {
-                    "score": score,
-                    "total": len(questions),
-                    "completed": True
-                }
+                    for i, row in questions.iterrows():
+                        correct_option = row[row["Correct"]]
+                        if answers[i] == correct_option:
+                            score += 1
 
-                save_progress(progress)
+                    progress[regno] = {
+                        "score": score,
+                        "total": len(questions),
+                        "completed": True
+                    }
 
-                st.success(f"✅ Your Score: {score}/{len(questions)}")
+                    save_progress(progress)
 
-                cert_file = generate_certificate(student, score, len(questions))
+                    st.success(f"✅ Your Score: {score}/{len(questions)}")
 
-                with open(cert_file, "rb") as f:
-                    st.download_button(
-                        "📥 Download Certificate",
-                        f,
-                        file_name=cert_file
-                    )
+                    cert_file = generate_certificate(student, score, len(questions))
+
+                    with open(cert_file, "rb") as f:
+                        st.download_button(
+                            "📥 Download Certificate",
+                            f,
+                            file_name=cert_file
+                        )
