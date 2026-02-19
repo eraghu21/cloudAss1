@@ -84,14 +84,14 @@ def generate_certificate(student, score, total, cert_id):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
     # ---------------- NAME + REGNO ----------------
-    pdf.set_font("Arial", "B", 24)
-    pdf.set_xy(0, 90)
-    pdf.cell(297, 10, f"{name} ({regno})", align="C")
+    pdf.set_font("Arial", "B", 18)
+    pdf.set_xy(0, 100)
+    pdf.cell(297, 10, f"{regno} ({name})", align="C")
 
     # ---------------- DEPT - YEAR - SEC ----------------
     pdf.set_font("Arial", "", 18)
-    pdf.set_xy(0, 105)
-    pdf.cell(297, 10, f"{dept} - Year {year} - Section {sec}", align="C")
+    pdf.set_xy(0, 110)
+    pdf.cell(297, 10, f"{sec} -  {year} -  {dept}", align="C")
 
     # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
     circle_x = 235   # horizontal position
@@ -109,11 +109,11 @@ def generate_certificate(student, score, total, cert_id):
 
     # ---------------- DATE ----------------
     pdf.set_font("Arial", "", 12)
-    pdf.set_xy(200, 170)
+    pdf.set_xy(150, 190)
     pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
 
     # ---------------- CERTIFICATE ID ----------------
-    pdf.set_xy(10, 185)
+    pdf.set_xy(150, 185)
     pdf.cell(120, 10, f"Certificate ID: {cert_id}")
 
     # ---------------- QR CODE ----------------
@@ -121,7 +121,7 @@ def generate_certificate(student, score, total, cert_id):
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
 
-    pdf.image("qr.png", x=240, y=150, w=35)
+    pdf.image("qr.png", x=150, y=150, w=35)
     os.remove("qr.png")
 
     pdf.output(file_name)
