@@ -109,11 +109,11 @@ def generate_certificate(student, score, total, cert_id):
 
     # ---------------- DATE ----------------
     pdf.set_font("Arial", "", 12)
-    pdf.set_xy(150, 180)
+    pdf.set_xy(150, 177)
     pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
 
     # ---------------- CERTIFICATE ID ----------------
-    pdf.set_xy(100, 180)
+    pdf.set_xy(100, 177)
     pdf.cell(80, 10, f"Certificate ID: {cert_id}")
 
     # ---------------- QR CODE ----------------
