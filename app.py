@@ -54,12 +54,13 @@ def save_progress(data):
         json.dump(data, f)
     encrypt_progress()
 
-# ---------------- COLUMN AUTO DETECTION ----------------
+# ---------------- COLUMN DETECTION ----------------
 
-def find_column(df, keyword):
+def find_column(df, keywords):
     for col in df.columns:
-        if keyword in col:
-            return col
+        for key in keywords:
+            if key in col:
+                return col
     return None
 
 # ---------------- CERTIFICATE ID ----------------
@@ -78,43 +79,36 @@ def generate_certificate(student, score, total, cert_id,
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # Name + RegNo
     pdf.set_font("Arial", "B", 28)
     pdf.set_xy(0, 90)
     pdf.cell(297, 10,
              f"{student[name_col]} ({student[reg_col]})",
              align="C")
 
-    # Dept-Year-Section
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
     pdf.cell(297, 10,
              f"{student[dept_col]} - Year {student[year_col]} - Section {student[sec_col]}",
              align="C")
 
-    # Marks
     pdf.set_font("Arial", "B", 20)
     pdf.set_xy(0, 135)
     pdf.cell(297, 10,
              f"Marks Obtained: {score} / {total}",
              align="C")
 
-    # Certificate ID
     pdf.set_font("Arial", "", 10)
     pdf.set_xy(10, 190)
     pdf.cell(100, 10, f"Certificate ID: {cert_id}")
 
-    # Date
     pdf.set_xy(220, 190)
     pdf.cell(60, 10,
              f"Date: {datetime.today().strftime('%d-%m-%Y')}",
              align="R")
 
-    # QR Code
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
@@ -122,7 +116,6 @@ def generate_certificate(student, score, total, cert_id,
     os.remove("qr.png")
 
     pdf.output(file_name)
-
     return file_name
 
 # ---------------- VERIFY PAGE ----------------
@@ -155,15 +148,29 @@ students = load_students()
 questions = load_questions()
 progress = load_progress()
 
-# Auto detect columns
-name_col = find_column(students, "name")
-reg_col = find_column(students, "reg")
-dept_col = find_column(students, "dept")
-year_col = find_column(students, "year")
-sec_col = find_column(students, "sec")
+# Detect student columns
+name_col = find_column(students, ["name"])
+reg_col = find_column(students, ["reg"])
+dept_col = find_column(students, ["dept"])
+year_col = find_column(students, ["year"])
+sec_col = find_column(students, ["sec"])
 
 if not all([name_col, reg_col, dept_col, year_col, sec_col]):
     st.error("Students Excel missing required columns.")
+    st.write("Detected columns:", students.columns.tolist())
+    st.stop()
+
+# Detect question columns
+q_col = find_column(questions, ["question"])
+opt_a_col = find_column(questions, ["optiona", "option a"])
+opt_b_col = find_column(questions, ["optionb", "option b"])
+opt_c_col = find_column(questions, ["optionc", "option c"])
+opt_d_col = find_column(questions, ["optiond", "option d"])
+correct_col = find_column(questions, ["correct", "answer"])
+
+if not all([q_col, opt_a_col, opt_b_col, opt_c_col, opt_d_col, correct_col]):
+    st.error("Questions Excel missing required columns.")
+    st.write("Detected columns:", questions.columns.tolist())
     st.stop()
 
 regno = st.text_input("Enter Register Number")
@@ -204,18 +211,20 @@ if "student" in st.session_state:
         total = len(questions)
 
         for i, row in questions.iterrows():
-            st.write(f"Q{i+1}: {row['question']}")
+            st.write(f"Q{i+1}: {row[q_col]}")
+
             option = st.radio(
                 "Select Answer",
-                [row['optiona'], row['optionb'], row['optionc'], row['optiond']],
+                [row[opt_a_col], row[opt_b_col], row[opt_c_col], row[opt_d_col]],
                 key=i
             )
+
             answers.append(option)
 
         if st.button("Submit Quiz"):
             score = 0
             for i, row in questions.iterrows():
-                if answers[i] == row["correct"]:
+                if answers[i] == row[correct_col]:
                     score += 1
 
             cert_id = generate_cert_id(regno, score)
