@@ -84,19 +84,19 @@ def generate_certificate(student, score, total, cert_id):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
     # Name + Reg No
-    pdf.set_font("Arial", "B", 28)
-    pdf.set_xy(0, 90)
-    pdf.cell(297, 10, f"{name} ({regno})", align="C")
+    pdf.set_font("Arial", "B", 18)
+    pdf.set_xy(0, 100)
+    pdf.cell(297, 10, f"{regno} ({name})", align="C")
 
     # Dept-Year-Sec
     pdf.set_font("Arial", "", 20)
-    pdf.set_xy(0, 110)
-    pdf.cell(297, 10, f"{dept} - Year {year} - Section {sec}", align="C")
+    pdf.set_xy(0, 105)
+    pdf.cell(297, 10, f"{dept} - {year} - {sec}", align="C")
 
     # Marks
     pdf.set_font("Arial", "B", 22)
-    pdf.set_xy(0, 130)
-    pdf.cell(297, 10, f"Marks Obtained: {score} / {total}", align="C")
+    pdf.set_xy(0, 120)
+    pdf.cell(297, 10, f" {score} / {total}", align="C")
 
     # Certificate ID
     pdf.set_font("Arial", "", 10)
