@@ -1,246 +1,440 @@
 import streamlit as st
 import pandas as pd
-import pyAesCrypt
-import os
-import json
-import hashlib
-import qrcode
+from cryptography.fernet import Fernet
 from fpdf import FPDF
+import os
+import base64
+import json
 from datetime import datetime
 
-# ================= CONFIG =================
+# ==============================
+# CONFIG
+# ==============================
 
-PASSWORD = st.secrets["ENC_KEY"]
-APP_URL = st.secrets["APP_URL"]
-bufferSize = 64 * 1024
+st.set_page_config(page_title="Cloud Basics and Infrastructure Quiz", layout="centered")
 
-# ================= ENCRYPT / DECRYPT =================
+SECRET_KEY = st.secrets["SECRET_KEY"]
+fernet = Fernet(SECRET_KEY.encode())
+
+# ==============================
+# DECRYPT FUNCTION
+# ==============================
 
 def decrypt_file(enc_file, output_file):
-    if os.path.exists(enc_file):
-        pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
+    with open(enc_file, "rb") as f:
+        encrypted = f.read()
+    decrypted = fernet.decrypt(encrypted)
+    with open(output_file, "wb") as f:
+        f.write(decrypted)
 
-def encrypt_progress():
-    pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
-    os.remove("progress.json")
-
-# ================= LOAD STUDENTS =================
+# ==============================
+# LOAD STUDENTS
+# ==============================
 
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
-    df = pd.read_excel("students.xlsx")
-    df.columns = df.columns.str.strip()
+
+    try:
+        df = pd.read_excel("students.xlsx")
+    except:
+        df = pd.read_excel("students.xlsx", header=1)
+
+    df.columns = df.columns.str.strip().str.lower()
     os.remove("students.xlsx")
     return df
 
-# ================= LOAD QUESTIONS =================
+# ==============================
+# LOAD QUESTIONS
+# ==============================
 
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
     df = pd.read_excel("questions.xlsx")
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.str.strip().str.lower()
     os.remove("questions.xlsx")
     return df
 
-# ================= LOAD PROGRESS =================
-
-def load_progress():
-    if os.path.exists("progress.enc"):
-        pyAesCrypt.decryptFile("progress.enc", "progress.json", PASSWORD, bufferSize)
-        with open("progress.json", "r") as f:
-            data = json.load(f)
-        os.remove("progress.json")
-        return data
-    return {}
+# ==============================
+# PROGRESS SAVE
+# ==============================
 
 def save_progress(data):
-    with open("progress.json", "w") as f:
-        json.dump(data, f)
-    encrypt_progress()
+    encrypted = fernet.encrypt(json.dumps(data).encode())
+    with open("progress.json.enc", "wb") as f:
+        f.write(encrypted)
 
-# ================= CERTIFICATE ID =================
+def load_progress():
+    if not os.path.exists("progress.json.enc"):
+        return {}
+    with open("progress.json.enc", "rb") as f:
+        encrypted = f.read()
+    decrypted = fernet.decrypt(encrypted)
+    return json.loads(decrypted)
 
-def generate_cert_id(regno, score):
-    raw = f"{regno}-{score}-SECUREKEY"
-    return hashlib.sha256(raw.encode()).hexdigest()[:12]
+# ==============================
+# CERTIFICATE GENERATION
+# ==============================
 
-# ================= CERTIFICATE =================
-
-def generate_certificate(student, score, total, cert_id):
-
-    name = str(student["Name"])
-    regno = str(student["Register No"])
-    dept = str(student["Department"])
-    year = str(student["Year"])
-    sec = str(student["Section"])
-
-    file_name = f"{regno}_certificate.pdf"
-
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
+def generate_certificate(name, regno, marks):
+    pdf = FPDF()
     pdf.add_page()
 
-    if os.path.exists("certificate_bg.png"):
-        pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
-
-    # Name
-    pdf.set_font("Arial", "B", 22)
-    pdf.set_xy(0, 95)
-    pdf.cell(297, 10, f"{name} ({regno})", align="C")
-
-    # Dept-Year-Sec
-    pdf.set_font("Arial", "", 18)
-    pdf.set_xy(0, 110)
-    pdf.cell(297, 10, f"{dept} - Year {year} - Section {sec}", align="C")
-
-    # Score Circle
-    circle_x = 235
-    circle_y = 80
-    radius = 35
-
-    pdf.set_line_width(2)
-    pdf.ellipse(circle_x, circle_y, radius, radius)
+    # Background Image
+    pdf.image("certificate_bg.jpg", x=0, y=0, w=210, h=297)
 
     pdf.set_font("Arial", "B", 20)
-    pdf.set_xy(circle_x, circle_y + 12)
-    pdf.cell(radius, 10, f"{score}/{total}", align="C")
+    pdf.ln(80)
+    pdf.cell(0, 10, "CERTIFICATE OF COMPLETION", align="C", ln=True)
 
-    # Date
-    pdf.set_font("Arial", "", 12)
-    pdf.set_xy(200, 170)
-    pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
+    pdf.ln(20)
+    pdf.set_font("Arial", "", 16)
+    pdf.cell(0, 10, f"This is to certify that", align="C", ln=True)
 
-    # Certificate ID
-    pdf.set_xy(20, 170)
-    pdf.cell(100, 10, f"Certificate ID: {cert_id}")
+    pdf.set_font("Arial", "B", 18)
+    pdf.cell(0, 10, name.upper(), align="C", ln=True)
 
-    # QR Code
-    qr_link = f"{APP_URL}?verify={cert_id}"
-    qr = qrcode.make(qr_link)
-    qr.save("qr.png")
-    pdf.image("qr.png", x=240, y=140, w=40)
-    os.remove("qr.png")
+    pdf.set_font("Arial", "", 14)
+    pdf.cell(0, 10, f"Register Number: {regno}", align="C", ln=True)
 
-    pdf.output(file_name)
-    return file_name
+    pdf.ln(10)
+    pdf.cell(0, 10, f"has successfully completed the quiz", align="C", ln=True)
+    pdf.cell(0, 10, f"with Marks: {marks}", align="C", ln=True)
 
-# ================= VERIFY MODE =================
+    pdf.ln(20)
+    pdf.cell(0, 10, f"Date: {datetime.now().strftime('%d-%m-%Y')}", align="C", ln=True)
 
-query_params = st.query_params
+    filename = f"certificate_{regno}.pdf"
+    pdf.output(filename)
+    return filename
 
-if "verify" in query_params:
-    cert_id = query_params["verify"]
-    progress = load_progress()
+# ==============================
+# APP START
+# ==============================
 
-    for reg, data in progress.items():
-        if data["cert_id"] == cert_id:
-            st.success("Certificate Verified ✅")
-            st.write("Register No:", reg)
-            st.write("Score:", data["score"], "/", data["total"])
-            st.stop()
-
-    st.error("Invalid Certificate ❌")
-    st.stop()
-
-# ================= MAIN APP =================
-
-st.title("🎓 CS22603 - Cloud Computing Assignment I")
+st.title("☁ Cloud Basics and Infrastructure Quiz")
 
 students = load_students()
 questions = load_questions()
 progress = load_progress()
 
-regno_input = st.text_input("Enter Register Number")
+# ==============================
+# LOGIN SECTION
+# ==============================
 
-if st.button("Login"):
+if "student" not in st.session_state:
 
-    # Clean register column
-    students["Register No"] = (
-        students["Register No"]
-        .astype(str)
-        .str.replace(".0", "", regex=False)
-        .str.strip()
-        .str.upper()
-    )
+    regno_input = st.text_input("Enter Register Number")
 
-    regno_clean = regno_input.strip().upper()
+    if st.button("Login"):
 
-    student = students[students["Register No"] == regno_clean]
+        reg_column = None
+        for col in students.columns:
+            if "reg" in col:
+                reg_column = col
+                break
 
-    if student.empty:
-        st.error("Invalid Register Number")
-    else:
-        st.session_state["student"] = student.iloc[0]
-        st.success("Login Successful")
+        if reg_column is None:
+            st.error("Register column not found in Excel")
+            st.write("Detected Columns:", students.columns.tolist())
+            st.stop()
 
-# ================= AFTER LOGIN =================
+        students[reg_column] = (
+            students[reg_column]
+            .astype(str)
+            .str.replace(".0", "", regex=False)
+            .str.strip()
+            .str.upper()
+        )
 
-if "student" in st.session_state:
+        regno_clean = regno_input.strip().upper()
+        student = students[students[reg_column] == regno_clean]
+
+        if student.empty:
+            st.error("Invalid Register Number")
+            st.write("Sample Register Numbers:", students[reg_column].head())
+        else:
+            st.session_state["student"] = student.iloc[0]
+            st.session_state["reg_column"] = reg_column
+            st.success("Login Successful")
+
+# ==============================
+# QUIZ SECTION
+# ==============================
+
+else:
 
     student = st.session_state["student"]
-    regno = str(student["Register No"])
+    reg_column = st.session_state["reg_column"]
+    regno = str(student[reg_column])
+    name_column = [col for col in students.columns if "name" in col][0]
+    name = student[name_column]
 
-    st.success(f"Welcome {student['Name']}")
+    st.success(f"Welcome {name}")
 
     if regno in progress:
-
-        st.warning("Quiz already completed")
+        st.info("You already completed the quiz.")
+        marks = progress[regno]["marks"]
 
         if st.button("Download Certificate"):
-
-            cert_id = progress[regno]["cert_id"]
-            file = generate_certificate(
-                student,
-                progress[regno]["score"],
-                progress[regno]["total"],
-                cert_id
-            )
-
+            file = generate_certificate(name, regno, marks)
             with open(file, "rb") as f:
-                st.download_button("Download Certificate", f, file_name=file)
+                st.download_button("Download PDF", f, file_name=file)
 
     else:
 
-        answers = []
-        total = len(questions)
+        q_col = [col for col in questions.columns if "question" in col][0]
+        opt_cols = [col for col in questions.columns if "option" in col]
+        ans_col = [col for col in questions.columns if "answer" in col][0]
+
+        score = 0
+        user_answers = {}
 
         for i, row in questions.iterrows():
-
-            st.write(f"Q{i+1}: {row.iloc[0]}")
-
-            option = st.radio(
-                "Select Answer",
-                [
-                    row.iloc[1],
-                    row.iloc[2],
-                    row.iloc[3],
-                    row.iloc[4]
-                ],
+            st.write(f"Q{i+1}: {row[q_col]}")
+            selected = st.radio(
+                "Choose one:",
+                [row[col] for col in opt_cols],
                 key=i
             )
-
-            answers.append(option)
+            user_answers[i] = selected
 
         if st.button("Submit Quiz"):
 
-            score = 0
-
             for i, row in questions.iterrows():
-                if answers[i] == row.iloc[5]:
+                if user_answers[i] == row[ans_col]:
                     score += 1
 
-            cert_id = generate_cert_id(regno, score)
-
             progress[regno] = {
-                "score": score,
-                "total": total,
-                "cert_id": cert_id
+                "name": name,
+                "marks": score,
+                "date": datetime.now().strftime("%d-%m-%Y")
             }
 
             save_progress(progress)
 
-            st.success(f"Quiz Completed! Score: {score}/{total}")
+            st.success(f"Quiz Completed! Your Score: {score}")
 
-            file = generate_certificate(student, score, total, cert_id)
+            file = generate_certificate(name, regno, score)
+
+            with open(file, "rb") as f:
+                st.download_button("Download Certificate", f, file_name=file)
+import streamlit as st
+import pandas as pd
+from cryptography.fernet import Fernet
+from fpdf import FPDF
+import os
+import base64
+import json
+from datetime import datetime
+
+# ==============================
+# CONFIG
+# ==============================
+
+st.set_page_config(page_title="Cloud Basics and Infrastructure Quiz", layout="centered")
+
+SECRET_KEY = st.secrets["SECRET_KEY"]
+fernet = Fernet(SECRET_KEY.encode())
+
+# ==============================
+# DECRYPT FUNCTION
+# ==============================
+
+def decrypt_file(enc_file, output_file):
+    with open(enc_file, "rb") as f:
+        encrypted = f.read()
+    decrypted = fernet.decrypt(encrypted)
+    with open(output_file, "wb") as f:
+        f.write(decrypted)
+
+# ==============================
+# LOAD STUDENTS
+# ==============================
+
+def load_students():
+    decrypt_file("students.xlsx.enc", "students.xlsx")
+
+    try:
+        df = pd.read_excel("students.xlsx")
+    except:
+        df = pd.read_excel("students.xlsx", header=1)
+
+    df.columns = df.columns.str.strip().str.lower()
+    os.remove("students.xlsx")
+    return df
+
+# ==============================
+# LOAD QUESTIONS
+# ==============================
+
+def load_questions():
+    decrypt_file("questions.xlsx.enc", "questions.xlsx")
+    df = pd.read_excel("questions.xlsx")
+    df.columns = df.columns.str.strip().str.lower()
+    os.remove("questions.xlsx")
+    return df
+
+# ==============================
+# PROGRESS SAVE
+# ==============================
+
+def save_progress(data):
+    encrypted = fernet.encrypt(json.dumps(data).encode())
+    with open("progress.json.enc", "wb") as f:
+        f.write(encrypted)
+
+def load_progress():
+    if not os.path.exists("progress.json.enc"):
+        return {}
+    with open("progress.json.enc", "rb") as f:
+        encrypted = f.read()
+    decrypted = fernet.decrypt(encrypted)
+    return json.loads(decrypted)
+
+# ==============================
+# CERTIFICATE GENERATION
+# ==============================
+
+def generate_certificate(name, regno, marks):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # Background Image
+    pdf.image("certificate_bg.jpg", x=0, y=0, w=210, h=297)
+
+    pdf.set_font("Arial", "B", 20)
+    pdf.ln(80)
+    pdf.cell(0, 10, "CERTIFICATE OF COMPLETION", align="C", ln=True)
+
+    pdf.ln(20)
+    pdf.set_font("Arial", "", 16)
+    pdf.cell(0, 10, f"This is to certify that", align="C", ln=True)
+
+    pdf.set_font("Arial", "B", 18)
+    pdf.cell(0, 10, name.upper(), align="C", ln=True)
+
+    pdf.set_font("Arial", "", 14)
+    pdf.cell(0, 10, f"Register Number: {regno}", align="C", ln=True)
+
+    pdf.ln(10)
+    pdf.cell(0, 10, f"has successfully completed the quiz", align="C", ln=True)
+    pdf.cell(0, 10, f"with Marks: {marks}", align="C", ln=True)
+
+    pdf.ln(20)
+    pdf.cell(0, 10, f"Date: {datetime.now().strftime('%d-%m-%Y')}", align="C", ln=True)
+
+    filename = f"certificate_{regno}.pdf"
+    pdf.output(filename)
+    return filename
+
+# ==============================
+# APP START
+# ==============================
+
+st.title("☁ Cloud Basics and Infrastructure Quiz")
+
+students = load_students()
+questions = load_questions()
+progress = load_progress()
+
+# ==============================
+# LOGIN SECTION
+# ==============================
+
+if "student" not in st.session_state:
+
+    regno_input = st.text_input("Enter Register Number")
+
+    if st.button("Login"):
+
+        reg_column = None
+        for col in students.columns:
+            if "reg" in col:
+                reg_column = col
+                break
+
+        if reg_column is None:
+            st.error("Register column not found in Excel")
+            st.write("Detected Columns:", students.columns.tolist())
+            st.stop()
+
+        students[reg_column] = (
+            students[reg_column]
+            .astype(str)
+            .str.replace(".0", "", regex=False)
+            .str.strip()
+            .str.upper()
+        )
+
+        regno_clean = regno_input.strip().upper()
+        student = students[students[reg_column] == regno_clean]
+
+        if student.empty:
+            st.error("Invalid Register Number")
+            st.write("Sample Register Numbers:", students[reg_column].head())
+        else:
+            st.session_state["student"] = student.iloc[0]
+            st.session_state["reg_column"] = reg_column
+            st.success("Login Successful")
+
+# ==============================
+# QUIZ SECTION
+# ==============================
+
+else:
+
+    student = st.session_state["student"]
+    reg_column = st.session_state["reg_column"]
+    regno = str(student[reg_column])
+    name_column = [col for col in students.columns if "name" in col][0]
+    name = student[name_column]
+
+    st.success(f"Welcome {name}")
+
+    if regno in progress:
+        st.info("You already completed the quiz.")
+        marks = progress[regno]["marks"]
+
+        if st.button("Download Certificate"):
+            file = generate_certificate(name, regno, marks)
+            with open(file, "rb") as f:
+                st.download_button("Download PDF", f, file_name=file)
+
+    else:
+
+        q_col = [col for col in questions.columns if "question" in col][0]
+        opt_cols = [col for col in questions.columns if "option" in col]
+        ans_col = [col for col in questions.columns if "answer" in col][0]
+
+        score = 0
+        user_answers = {}
+
+        for i, row in questions.iterrows():
+            st.write(f"Q{i+1}: {row[q_col]}")
+            selected = st.radio(
+                "Choose one:",
+                [row[col] for col in opt_cols],
+                key=i
+            )
+            user_answers[i] = selected
+
+        if st.button("Submit Quiz"):
+
+            for i, row in questions.iterrows():
+                if user_answers[i] == row[ans_col]:
+                    score += 1
+
+            progress[regno] = {
+                "name": name,
+                "marks": score,
+                "date": datetime.now().strftime("%d-%m-%Y")
+            }
+
+            save_progress(progress)
+
+            st.success(f"Quiz Completed! Your Score: {score}")
+
+            file = generate_certificate(name, regno, score)
 
             with open(file, "rb") as f:
                 st.download_button("Download Certificate", f, file_name=file)
