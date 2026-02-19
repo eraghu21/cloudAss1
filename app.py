@@ -79,43 +79,54 @@ def generate_certificate(student, score, total, cert_id):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background Image
+    # Background
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # Name + Reg No
-    pdf.set_font("Arial", "B", 18)
-    pdf.set_xy(0, 100)
-    pdf.cell(297, 10, f"{regno} ({name})", align="C")
+    # ---------------- NAME + REGNO ----------------
+    pdf.set_font("Arial", "B", 24)
+    pdf.set_xy(0, 90)
+    pdf.cell(297, 10, f"{name} ({regno})", align="C")
 
-    # Dept-Year-Sec
-    pdf.set_font("Arial", "", 20)
+    # ---------------- DEPT - YEAR - SEC ----------------
+    pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 105)
-    pdf.cell(297, 10, f"{dept} - {year} - {sec}", align="C")
+    pdf.cell(297, 10, f"{dept} - Year {year} - Section {sec}", align="C")
 
-    # Marks
-    pdf.set_font("Arial", "B", 22)
-    pdf.set_xy(0, 120)
-    pdf.cell(297, 10, f" {score} / {total}", align="C")
+    # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
+    circle_x = 235   # horizontal position
+    circle_y = 85    # vertical position
+    radius = 25
 
-    # Certificate ID
-    pdf.set_font("Arial", "", 10)
-    pdf.set_xy(10, 190)
-    pdf.cell(100, 10, f"Certificate ID: {cert_id}")
+    # Draw Circle
+    pdf.set_line_width(1.5)
+    pdf.ellipse(circle_x, circle_y, radius, radius)
 
-    # Date
-    pdf.set_xy(220, 190)
-    pdf.cell(60, 10, datetime.today().strftime('%d-%m-%Y'), align="R")
+    # Score Text inside circle
+    pdf.set_font("Arial", "B", 20)
+    pdf.set_xy(circle_x, circle_y + 8)
+    pdf.cell(radius, 10, f"{score}/{total}", align="C")
 
-    # QR Code
+    # ---------------- DATE ----------------
+    pdf.set_font("Arial", "", 12)
+    pdf.set_xy(200, 170)
+    pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
+
+    # ---------------- CERTIFICATE ID ----------------
+    pdf.set_xy(10, 185)
+    pdf.cell(120, 10, f"Certificate ID: {cert_id}")
+
+    # ---------------- QR CODE ----------------
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
-    pdf.image("qr.png", x=250, y=150, w=30)
+
+    pdf.image("qr.png", x=240, y=150, w=35)
     os.remove("qr.png")
 
     pdf.output(file_name)
     return file_name
+
 
 # ================= VERIFY MODE =================
 
