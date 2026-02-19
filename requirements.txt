@@ -1,5 +1,6 @@
 streamlit
 pandas
 pyAesCrypt
-reportlab
+fpdf
+qrcode
 openpyxl
