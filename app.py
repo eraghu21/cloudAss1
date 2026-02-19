@@ -4,18 +4,17 @@ import pyAesCrypt
 import os
 import json
 import hashlib
-import uuid
 import qrcode
 from fpdf import FPDF
 from datetime import datetime
 
-# -------------------- CONFIG --------------------
+# ---------------- CONFIG ----------------
 
 PASSWORD = st.secrets["ENC_KEY"]
 APP_URL = st.secrets["APP_URL"]
 bufferSize = 64 * 1024
 
-# -------------------- ENCRYPT / DECRYPT --------------------
+# ---------------- ENCRYPT / DECRYPT ----------------
 
 def decrypt_file(enc_file, output_file):
     if os.path.exists(enc_file):
@@ -25,19 +24,19 @@ def encrypt_progress():
     pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
     os.remove("progress.json")
 
-# -------------------- LOAD DATA --------------------
+# ---------------- LOAD DATA ----------------
 
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
     df = pd.read_excel("students.xlsx", header=1)
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.str.strip().str.lower()
     os.remove("students.xlsx")
     return df
 
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
     df = pd.read_excel("questions.xlsx", header=1)
-    df.columns = df.columns.str.strip()
+    df.columns = df.columns.str.strip().str.lower()
     os.remove("questions.xlsx")
     return df
 
@@ -55,17 +54,26 @@ def save_progress(data):
         json.dump(data, f)
     encrypt_progress()
 
-# -------------------- CERTIFICATE ID --------------------
+# ---------------- COLUMN AUTO DETECTION ----------------
+
+def find_column(df, keyword):
+    for col in df.columns:
+        if keyword in col:
+            return col
+    return None
+
+# ---------------- CERTIFICATE ID ----------------
 
 def generate_cert_id(regno, score):
     raw = f"{regno}-{score}-SECUREKEY"
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
-# -------------------- CERTIFICATE --------------------
+# ---------------- CERTIFICATE ----------------
 
-def generate_certificate(student, score, total, cert_id):
+def generate_certificate(student, score, total, cert_id,
+                         name_col, reg_col, dept_col, year_col, sec_col):
 
-    file_name = f"{student['RegNo']}_certificate.pdf"
+    file_name = f"{student[reg_col]}_certificate.pdf"
 
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -74,29 +82,26 @@ def generate_certificate(student, score, total, cert_id):
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # Name
+    # Name + RegNo
     pdf.set_font("Arial", "B", 28)
     pdf.set_xy(0, 90)
     pdf.cell(297, 10,
-        f"{student['Name']} ({student['RegNo']})",
-        align="C"
-    )
+             f"{student[name_col]} ({student[reg_col]})",
+             align="C")
 
-    # Dept row
+    # Dept-Year-Section
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
     pdf.cell(297, 10,
-        f"{student['Dept']} - Year {student['Year']} - Section {student['Section']}",
-        align="C"
-    )
+             f"{student[dept_col]} - Year {student[year_col]} - Section {student[sec_col]}",
+             align="C")
 
     # Marks
     pdf.set_font("Arial", "B", 20)
     pdf.set_xy(0, 135)
     pdf.cell(297, 10,
-        f"Marks Obtained: {score} / {total}",
-        align="C"
-    )
+             f"Marks Obtained: {score} / {total}",
+             align="C")
 
     # Certificate ID
     pdf.set_font("Arial", "", 10)
@@ -106,22 +111,21 @@ def generate_certificate(student, score, total, cert_id):
     # Date
     pdf.set_xy(220, 190)
     pdf.cell(60, 10,
-        f"Date: {datetime.today().strftime('%d-%m-%Y')}",
-        align="R"
-    )
+             f"Date: {datetime.today().strftime('%d-%m-%Y')}",
+             align="R")
 
     # QR Code
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
     pdf.image("qr.png", x=250, y=150, w=30)
+    os.remove("qr.png")
 
     pdf.output(file_name)
-    os.remove("qr.png")
 
     return file_name
 
-# -------------------- VERIFY PAGE --------------------
+# ---------------- VERIFY PAGE ----------------
 
 query_params = st.query_params
 
@@ -143,7 +147,7 @@ if "verify" in query_params:
 
     st.stop()
 
-# -------------------- MAIN APP --------------------
+# ---------------- MAIN APP ----------------
 
 st.title("🎓 Secure Online Quiz & Certificate System")
 
@@ -151,20 +155,33 @@ students = load_students()
 questions = load_questions()
 progress = load_progress()
 
+# Auto detect columns
+name_col = find_column(students, "name")
+reg_col = find_column(students, "reg")
+dept_col = find_column(students, "dept")
+year_col = find_column(students, "year")
+sec_col = find_column(students, "sec")
+
+if not all([name_col, reg_col, dept_col, year_col, sec_col]):
+    st.error("Students Excel missing required columns.")
+    st.stop()
+
 regno = st.text_input("Enter Register Number")
 
 if st.button("Login"):
-    student = students[students["RegNo"].astype(str) == regno]
+    student = students[students[reg_col].astype(str) == regno]
 
     if student.empty:
         st.error("Invalid Register Number")
     else:
         st.session_state["student"] = student.iloc[0]
 
+# ---------------- AFTER LOGIN ----------------
+
 if "student" in st.session_state:
 
     student = st.session_state["student"]
-    st.success(f"Welcome {student['Name']}")
+    st.success(f"Welcome {student[name_col]}")
 
     if regno in progress:
         st.warning("Quiz already completed!")
@@ -175,7 +192,8 @@ if "student" in st.session_state:
                 student,
                 progress[regno]["score"],
                 progress[regno]["total"],
-                cert_id
+                cert_id,
+                name_col, reg_col, dept_col, year_col, sec_col
             )
 
             with open(file, "rb") as f:
@@ -186,10 +204,10 @@ if "student" in st.session_state:
         total = len(questions)
 
         for i, row in questions.iterrows():
-            st.write(f"Q{i+1}: {row['Question']}")
+            st.write(f"Q{i+1}: {row['question']}")
             option = st.radio(
                 "Select Answer",
-                [row['OptionA'], row['OptionB'], row['OptionC'], row['OptionD']],
+                [row['optiona'], row['optionb'], row['optionc'], row['optiond']],
                 key=i
             )
             answers.append(option)
@@ -197,7 +215,7 @@ if "student" in st.session_state:
         if st.button("Submit Quiz"):
             score = 0
             for i, row in questions.iterrows():
-                if answers[i] == row["Correct"]:
+                if answers[i] == row["correct"]:
                     score += 1
 
             cert_id = generate_cert_id(regno, score)
@@ -212,7 +230,10 @@ if "student" in st.session_state:
 
             st.success(f"Quiz Completed! Score: {score}/{total}")
 
-            file = generate_certificate(student, score, total, cert_id)
+            file = generate_certificate(
+                student, score, total, cert_id,
+                name_col, reg_col, dept_col, year_col, sec_col
+            )
 
             with open(file, "rb") as f:
                 st.download_button("Download Certificate", f, file_name=file)
