@@ -148,7 +148,7 @@ if "verify" in query_params:
 
 # ================= MAIN APP =================
 
-st.title("🎓 Secure Quiz & Certificate System")
+st.title("🎓 CS22603 - Cloud Computing Assignment- I")
 
 students = load_students()
 questions = load_questions()
