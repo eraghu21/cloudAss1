@@ -228,7 +228,7 @@ if "student" in st.session_state:
 
         if st.button("Submit Quiz"):
 
-            score = 0
+            score = 25
 
             for i, row in questions.iterrows():
                 if answers[i] == row.iloc[5]:
