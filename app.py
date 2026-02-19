@@ -109,7 +109,7 @@ def generate_certificate(student, score, total, cert_id):
 
     # ---------------- DATE ----------------
     pdf.set_font("Arial", "", 12)
-    pdf.set_xy(150, 190)
+    pdf.set_xy(150, 180)
     pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
 
     # ---------------- CERTIFICATE ID ----------------
