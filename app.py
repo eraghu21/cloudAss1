@@ -28,8 +28,14 @@ def encrypt_progress():
 
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
-    df = pd.read_excel("students.xlsx")
-    df.columns = df.columns.str.strip()
+
+    try:
+        df = pd.read_excel("students.xlsx")
+    except:
+        df = pd.read_excel("students.xlsx", header=1)
+
+    df.columns = df.columns.str.strip().str.lower()
+
     os.remove("students.xlsx")
     return df
 
@@ -37,8 +43,14 @@ def load_students():
 
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
-    df = pd.read_excel("questions.xlsx")
+
+    try:
+        df = pd.read_excel("questions.xlsx")
+    except:
+        df = pd.read_excel("questions.xlsx", header=1)
+
     df.columns = df.columns.str.strip()
+
     os.remove("questions.xlsx")
     return df
 
@@ -68,22 +80,21 @@ def generate_cert_id(regno, score):
 
 def generate_certificate(student, score, total, cert_id):
 
-    name = str(student.iloc[0])
-    regno = str(student.iloc[1])
-    dept = str(student.iloc[2])
-    year = str(student.iloc[3])
-    sec = str(student.iloc[4])
+    name = str(student[0])
+    regno = str(student[1])
+    dept = str(student[2])
+    year = str(student[3])
+    sec = str(student[4])
 
     file_name = f"{regno}_certificate.pdf"
 
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # Name + Reg No
+    # Name
     pdf.set_font("Arial", "B", 22)
     pdf.set_xy(0, 95)
     pdf.cell(297, 10, f"{name} ({regno})", align="C")
@@ -93,7 +104,7 @@ def generate_certificate(student, score, total, cert_id):
     pdf.set_xy(0, 110)
     pdf.cell(297, 10, f"{dept} - Year {year} - Section {sec}", align="C")
 
-    # ---------------- ROUND SCORE BADGE ----------------
+    # Score Circle
     circle_x = 235
     circle_y = 80
     radius = 35
@@ -114,7 +125,7 @@ def generate_certificate(student, score, total, cert_id):
     pdf.set_xy(20, 170)
     pdf.cell(100, 10, f"Certificate ID: {cert_id}")
 
-    # QR Code
+    # QR
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
@@ -150,22 +161,43 @@ students = load_students()
 questions = load_questions()
 progress = load_progress()
 
-regno = st.text_input("Enter Register Number")
-
 # ================= LOGIN =================
+
+regno_input = st.text_input("Enter Register Number")
 
 if st.button("Login"):
 
-    # Clean register column
-    students.iloc[:,1] = students.iloc[:,1].astype(str).str.strip().str.upper()
-    regno_clean = regno.strip().upper()
+    # Auto-detect register column
+    reg_column = None
+    for col in students.columns:
+        if "reg" in col:
+            reg_column = col
+            break
 
-    student = students[students.iloc[:,1] == regno_clean]
+    if reg_column is None:
+        st.error("Register column not found in Excel")
+        st.write("Detected columns:", students.columns.tolist())
+        st.stop()
+
+    # Clean register column
+    students[reg_column] = (
+        students[reg_column]
+        .astype(str)
+        .str.replace(".0", "", regex=False)
+        .str.strip()
+        .str.upper()
+    )
+
+    regno_clean = regno_input.strip().upper()
+
+    student = students[students[reg_column] == regno_clean]
 
     if student.empty:
         st.error("Invalid Register Number")
+        st.write("Sample Register Numbers:", students[reg_column].head())
     else:
         st.session_state["student"] = student.iloc[0]
+        st.session_state["reg_column"] = reg_column
         st.success("Login Successful")
 
 # ================= AFTER LOGIN =================
@@ -173,9 +205,10 @@ if st.button("Login"):
 if "student" in st.session_state:
 
     student = st.session_state["student"]
-    regno = str(student.iloc[1])
+    reg_column = st.session_state["reg_column"]
+    regno = str(student[reg_column])
 
-    st.success(f"Welcome {student.iloc[0]}")
+    st.success(f"Welcome {student[0]}")
 
     if regno in progress:
 
@@ -200,7 +233,6 @@ if "student" in st.session_state:
         total = len(questions)
 
         for i, row in questions.iterrows():
-
             st.write(f"Q{i+1}: {row.iloc[0]}")
 
             option = st.radio(
