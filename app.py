@@ -14,6 +14,8 @@ PASSWORD = st.secrets["ENC_KEY"]
 APP_URL = st.secrets["APP_URL"]
 bufferSize = 64 * 1024
 
+st.set_page_config(page_title="Secure Quiz System", page_icon="🎓")
+
 # ================= ENCRYPT / DECRYPT =================
 
 def decrypt_file(enc_file, output_file):
@@ -31,6 +33,21 @@ def load_students():
     df = pd.read_excel("students.xlsx")
     df.columns = df.columns.str.strip()
     os.remove("students.xlsx")
+
+    # Normalize column names
+    df.columns = df.columns.str.strip()
+
+    # Force correct naming
+    df = df.rename(columns={
+        df.columns[0]: "Name",
+        df.columns[1]: "RegNo",
+        df.columns[2]: "Dept",
+        df.columns[3]: "Year",
+        df.columns[4]: "Section"
+    })
+
+    df["RegNo"] = df["RegNo"].astype(str).str.strip()
+
     return df
 
 # ================= LOAD QUESTIONS =================
@@ -40,6 +57,7 @@ def load_questions():
     df = pd.read_excel("questions.xlsx")
     df.columns = df.columns.str.strip()
     os.remove("questions.xlsx")
+
     return df
 
 # ================= LOAD PROGRESS =================
@@ -68,65 +86,60 @@ def generate_cert_id(regno, score):
 
 def generate_certificate(student, score, total, cert_id):
 
-    name = str(student.iloc[0])
-    regno = str(student.iloc[1])
-    dept = str(student.iloc[2])
-    year = str(student.iloc[3])
-    sec = str(student.iloc[4])
+    name = student["Name"]
+    regno = student["RegNo"]
+    dept = student["Dept"]
+    year = student["Year"]
+    section = student["Section"]
 
     file_name = f"{regno}_certificate.pdf"
 
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background
+    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # ---------------- NAME + REGNO ----------------
-    pdf.set_font("Arial", "B", 18)
-    pdf.set_xy(0, 100)
+    pdf.set_font("Arial", "B", 22)
+    pdf.set_xy(0, 95)
     pdf.cell(297, 10, f"{regno} ({name})", align="C")
 
-    # ---------------- DEPT - YEAR - SEC ----------------
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
-    pdf.cell(297, 10, f"{sec} -  {year} -  {dept}", align="C")
+    pdf.cell(297, 10, f"{section} - {year} - {dept}", align="C")
 
-    # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
-    circle_x = 235   # horizontal position
-    circle_y = 85    # vertical position
-    radius = 25
+    # Score Circle
+    circle_x = 235
+    circle_y = 75
+    radius = 40
 
-    # Draw Circle
     pdf.set_line_width(1.5)
     pdf.ellipse(circle_x, circle_y, radius, radius)
 
-    # Score Text inside circle
-    pdf.set_font("Arial", "B", 20)
-    pdf.set_xy(circle_x, circle_y + 8)
+    pdf.set_font("Arial", "B", 22)
+    pdf.set_xy(circle_x, circle_y + 12)
     pdf.cell(radius, 10, f"{score}/{total}", align="C")
 
-    # ---------------- DATE ----------------
+    # Date
     pdf.set_font("Arial", "", 12)
-    pdf.set_xy(150, 177)
-    pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
+    pdf.set_xy(200, 180)
+    pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}")
 
-    # ---------------- CERTIFICATE ID ----------------
-    pdf.set_xy(100, 177)
+    # Certificate ID
+    pdf.set_xy(100, 180)
     pdf.cell(80, 10, f"Certificate ID: {cert_id}")
 
-    # ---------------- QR CODE ----------------
+    # QR Code
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
 
-    pdf.image("qr.png", x=15, y=100, w=35)
+    pdf.image("qr.png", x=20, y=130, w=35)
     os.remove("qr.png")
 
     pdf.output(file_name)
     return file_name
-
 
 # ================= VERIFY MODE =================
 
@@ -154,19 +167,18 @@ students = load_students()
 questions = load_questions()
 progress = load_progress()
 
-# Assume column order in students:
-# 0=Name, 1=RegNo, 2=Dept, 3=Year, 4=Section
-
-regno = st.text_input("Enter Register Number")
+regno_input = st.text_input("Enter Register Number")
 
 if st.button("Login"):
 
-    student = students[students.iloc[:,1].astype(str) == regno]
+    regno_clean = regno_input.strip()
 
-    if student.empty:
+    student_df = students[students["RegNo"] == regno_clean]
+
+    if student_df.empty:
         st.error("Invalid Register Number")
     else:
-        st.session_state["student"] = student.iloc[0]
+        st.session_state["student"] = student_df.iloc[0].to_dict()
         st.success("Login Successful")
 
 # ================= AFTER LOGIN =================
@@ -174,11 +186,10 @@ if st.button("Login"):
 if "student" in st.session_state:
 
     student = st.session_state["student"]
-    regno = str(student.iloc[1])
+    regno = student["RegNo"]
 
-    st.success(f"Welcome {student.iloc[0]}")
+    st.success(f"Welcome {student['Name']}")
 
-    # Prevent Reattempt
     if regno in progress:
 
         st.warning("Quiz already completed")
@@ -186,6 +197,7 @@ if "student" in st.session_state:
         if st.button("Download Certificate"):
 
             cert_id = progress[regno]["cert_id"]
+
             file = generate_certificate(
                 student,
                 progress[regno]["score"],
@@ -200,14 +212,6 @@ if "student" in st.session_state:
 
         answers = []
         total = len(questions)
-
-        # Assume question format:
-        # 0=Question
-        # 1=Option A
-        # 2=Option B
-        # 3=Option C
-        # 4=Option D
-        # 5=Correct Answer
 
         for i, row in questions.iterrows():
 
