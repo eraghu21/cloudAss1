@@ -79,54 +79,50 @@ def generate_certificate(student, score, total, cert_id):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background
+    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # ---------------- NAME + REGNO ----------------
-    pdf.set_font("Arial", "B", 18)
-    pdf.set_xy(0, 100)
-    pdf.cell(297, 10, f"{regno} ({name})", align="C")
+    # Name + Reg No
+    pdf.set_font("Arial", "B", 22)
+    pdf.set_xy(0, 95)
+    pdf.cell(297, 10, f"{name} ({regno})", align="C")
 
-    # ---------------- DEPT - YEAR - SEC ----------------
+    # Dept-Year-Sec
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
-    pdf.cell(297, 10, f"{sec} -  {year} -  {dept}", align="C")
+    pdf.cell(297, 10, f"{dept} - Year {year} - Section {sec}", align="C")
 
-    # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
-    circle_x = 235   # horizontal position
-    circle_y = 85    # vertical position
-    radius = 25
+    # ---------------- ROUND SCORE BADGE ----------------
+    circle_x = 235
+    circle_y = 80
+    radius = 35
 
-    # Draw Circle
-    pdf.set_line_width(1.5)
+    pdf.set_line_width(2)
     pdf.ellipse(circle_x, circle_y, radius, radius)
 
-    # Score Text inside circle
     pdf.set_font("Arial", "B", 20)
-    pdf.set_xy(circle_x, circle_y + 8)
+    pdf.set_xy(circle_x, circle_y + 12)
     pdf.cell(radius, 10, f"{score}/{total}", align="C")
 
-    # ---------------- DATE ----------------
+    # Date
     pdf.set_font("Arial", "", 12)
-    pdf.set_xy(135, 177)
+    pdf.set_xy(200, 170)
     pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
 
-    # ---------------- CERTIFICATE ID ----------------
-    pdf.set_xy(100, 177)
-    pdf.cell(80, 10, f"Certificate ID: {cert_id}")
+    # Certificate ID
+    pdf.set_xy(20, 170)
+    pdf.cell(100, 10, f"Certificate ID: {cert_id}")
 
-    # ---------------- QR CODE ----------------
+    # QR Code
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
-
-    pdf.image("qr.png", x=20, y=80, w=35)
+    pdf.image("qr.png", x=240, y=140, w=40)
     os.remove("qr.png")
 
     pdf.output(file_name)
     return file_name
-
 
 # ================= VERIFY MODE =================
 
@@ -148,20 +144,23 @@ if "verify" in query_params:
 
 # ================= MAIN APP =================
 
-st.title("🎓 CS22603 - Cloud Computing Assignment- I")
+st.title("🎓 CS22603 - Cloud Computing Assignment I")
 
 students = load_students()
 questions = load_questions()
 progress = load_progress()
 
-# Assume column order in students:
-# 0=Name, 1=RegNo, 2=Dept, 3=Year, 4=Section
-
 regno = st.text_input("Enter Register Number")
+
+# ================= LOGIN =================
 
 if st.button("Login"):
 
-    student = students[students.iloc[:,1].astype(str) == regno]
+    # Clean register column
+    students.iloc[:,1] = students.iloc[:,1].astype(str).str.strip().str.upper()
+    regno_clean = regno.strip().upper()
+
+    student = students[students.iloc[:,1] == regno_clean]
 
     if student.empty:
         st.error("Invalid Register Number")
@@ -178,7 +177,6 @@ if "student" in st.session_state:
 
     st.success(f"Welcome {student.iloc[0]}")
 
-    # Prevent Reattempt
     if regno in progress:
 
         st.warning("Quiz already completed")
@@ -201,14 +199,6 @@ if "student" in st.session_state:
         answers = []
         total = len(questions)
 
-        # Assume question format:
-        # 0=Question
-        # 1=Option A
-        # 2=Option B
-        # 3=Option C
-        # 4=Option D
-        # 5=Correct Answer
-
         for i, row in questions.iterrows():
 
             st.write(f"Q{i+1}: {row.iloc[0]}")
@@ -228,7 +218,7 @@ if "student" in st.session_state:
 
         if st.button("Submit Quiz"):
 
-            score = 25
+            score = 0
 
             for i, row in questions.iterrows():
                 if answers[i] == row.iloc[5]:
