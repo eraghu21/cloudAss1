@@ -109,7 +109,7 @@ def generate_certificate(student, score, total, cert_id):
 
     # ---------------- DATE ----------------
     pdf.set_font("Arial", "", 12)
-    pdf.set_xy(150, 177)
+    pdf.set_xy(135, 177)
     pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
 
     # ---------------- CERTIFICATE ID ----------------
@@ -121,7 +121,7 @@ def generate_certificate(student, score, total, cert_id):
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
 
-    pdf.image("qr.png", x=15, y=100, w=35)
+    pdf.image("qr.png", x=20, y=80, w=35)
     os.remove("qr.png")
 
     pdf.output(file_name)
