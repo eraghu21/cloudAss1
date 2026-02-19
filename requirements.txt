@@ -1,6 +1,7 @@
 streamlit
 pandas
+openpyxl
 pyAesCrypt
 fpdf
 qrcode
-openpyxl
+pillow
