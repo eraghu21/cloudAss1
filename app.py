@@ -28,14 +28,8 @@ def encrypt_progress():
 
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
-
-    try:
-        df = pd.read_excel("students.xlsx")
-    except:
-        df = pd.read_excel("students.xlsx", header=1)
-
-    df.columns = df.columns.str.strip().str.lower()
-
+    df = pd.read_excel("students.xlsx")
+    df.columns = df.columns.str.strip()
     os.remove("students.xlsx")
     return df
 
@@ -43,14 +37,8 @@ def load_students():
 
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
-
-    try:
-        df = pd.read_excel("questions.xlsx")
-    except:
-        df = pd.read_excel("questions.xlsx", header=1)
-
+    df = pd.read_excel("questions.xlsx")
     df.columns = df.columns.str.strip()
-
     os.remove("questions.xlsx")
     return df
 
@@ -80,11 +68,11 @@ def generate_cert_id(regno, score):
 
 def generate_certificate(student, score, total, cert_id):
 
-    name = str(student[0])
-    regno = str(student[1])
-    dept = str(student[2])
-    year = str(student[3])
-    sec = str(student[4])
+    name = str(student["Name"])
+    regno = str(student["Register No"])
+    dept = str(student["Department"])
+    year = str(student["Year"])
+    sec = str(student["Section"])
 
     file_name = f"{regno}_certificate.pdf"
 
@@ -125,7 +113,7 @@ def generate_certificate(student, score, total, cert_id):
     pdf.set_xy(20, 170)
     pdf.cell(100, 10, f"Certificate ID: {cert_id}")
 
-    # QR
+    # QR Code
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
@@ -161,27 +149,13 @@ students = load_students()
 questions = load_questions()
 progress = load_progress()
 
-# ================= LOGIN =================
-
 regno_input = st.text_input("Enter Register Number")
 
 if st.button("Login"):
 
-    # Auto-detect register column
-    reg_column = None
-    for col in students.columns:
-        if "reg" in col:
-            reg_column = col
-            break
-
-    if reg_column is None:
-        st.error("Register column not found in Excel")
-        st.write("Detected columns:", students.columns.tolist())
-        st.stop()
-
     # Clean register column
-    students[reg_column] = (
-        students[reg_column]
+    students["Register No"] = (
+        students["Register No"]
         .astype(str)
         .str.replace(".0", "", regex=False)
         .str.strip()
@@ -190,14 +164,12 @@ if st.button("Login"):
 
     regno_clean = regno_input.strip().upper()
 
-    student = students[students[reg_column] == regno_clean]
+    student = students[students["Register No"] == regno_clean]
 
     if student.empty:
         st.error("Invalid Register Number")
-        st.write("Sample Register Numbers:", students[reg_column].head())
     else:
         st.session_state["student"] = student.iloc[0]
-        st.session_state["reg_column"] = reg_column
         st.success("Login Successful")
 
 # ================= AFTER LOGIN =================
@@ -205,10 +177,9 @@ if st.button("Login"):
 if "student" in st.session_state:
 
     student = st.session_state["student"]
-    reg_column = st.session_state["reg_column"]
-    regno = str(student[reg_column])
+    regno = str(student["Register No"])
 
-    st.success(f"Welcome {student[0]}")
+    st.success(f"Welcome {student['Name']}")
 
     if regno in progress:
 
@@ -233,6 +204,7 @@ if "student" in st.session_state:
         total = len(questions)
 
         for i, row in questions.iterrows():
+
             st.write(f"Q{i+1}: {row.iloc[0]}")
 
             option = st.radio(
