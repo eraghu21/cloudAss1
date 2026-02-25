@@ -64,10 +64,6 @@ def load_questions():
 
         df.columns = df.columns.str.strip()
 
-        if len(df.columns) < 5:
-            st.error("Questions file format incorrect.")
-            st.stop()
-
         return df
 
     except Exception:
@@ -105,7 +101,22 @@ def save_progress(data):
     pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
     os.remove("progress.json")
 
-# ================= CERTIFICATE (UNCHANGED) =================
+# ================= LOAD ONCE (IMPORTANT FIX) =================
+
+if "students" not in st.session_state:
+    st.session_state.students = load_students()
+
+if "questions_master" not in st.session_state:
+    st.session_state.questions_master = load_questions()
+
+if "progress" not in st.session_state:
+    st.session_state.progress = load_progress()
+
+students = st.session_state.students
+questions_master = st.session_state.questions_master
+progress = st.session_state.progress
+
+# ================= CERTIFICATE (UNCHANGED FORMAT) =================
 
 def generate_cert_id(regno, score):
     raw = f"{regno}-{score}-SECUREKEY"
@@ -118,7 +129,6 @@ def generate_certificate(student, score, cert_id):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
@@ -132,7 +142,6 @@ def generate_certificate(student, score, cert_id):
              f"{student['Section']} - {student['Year']} - {student['Dept']}",
              align="C")
 
-    # Score Circle
     circle_x = 235
     circle_y = 85
     radius = 25
@@ -160,13 +169,7 @@ def generate_certificate(student, score, cert_id):
     pdf.output(file_name)
     return file_name
 
-# ================= INITIAL LOAD =================
-
-students = load_students()
-questions_master = load_questions()
-progress = load_progress()
-
-# ================= VERIFY MODE =================
+# ================= VERIFY =================
 
 if "verify" in st.query_params:
     cert_id = st.query_params["verify"]
@@ -203,7 +206,7 @@ if "student" in st.session_state:
     student = st.session_state.student
     regno = student["RegNo"]
 
-    # 🚫 BLOCK SECOND ATTEMPT
+    # BLOCK SECOND ATTEMPT
     if regno in progress:
 
         st.error("⚠️ You have already submitted the exam.")
@@ -219,7 +222,7 @@ if "student" in st.session_state:
 
         st.stop()
 
-    # Initialize attempt
+    # Initialize first attempt
     if "questions" not in st.session_state:
         st.session_state.questions = questions_master.sample(frac=1).reset_index(drop=True)
         st.session_state.current_q = 0
@@ -227,7 +230,6 @@ if "student" in st.session_state:
 
     questions = st.session_state.questions
     total_q = len(questions)
-
     submit = False
 
     # Timer
@@ -265,11 +267,9 @@ if "student" in st.session_state:
     if col2.button("Submit Exam"):
         submit = True
 
-    # ================= FINAL SUBMIT =================
-
+    # FINAL SUBMIT
     if submit:
 
-        # 🎯 RANDOM MARKS 45-50
         score = random.randint(45, 50)
 
         cert_id = generate_cert_id(regno, score)
@@ -279,6 +279,7 @@ if "student" in st.session_state:
             "cert_id": cert_id
         }
 
+        st.session_state.progress = progress
         save_progress(progress)
 
         st.success(f"🎉 Exam Submitted! Score: {score} / 50")
