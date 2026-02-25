@@ -5,7 +5,6 @@ import os
 import json
 import hashlib
 import qrcode
-import random
 import time
 from fpdf import FPDF
 from datetime import datetime
@@ -19,27 +18,6 @@ MAX_MARKS = 50
 QUIZ_DURATION = 300  # 5 minutes
 
 st.set_page_config(page_title="Secure Quiz System", page_icon="🎓", layout="centered")
-
-# ================= UI =================
-
-st.markdown("""
-<style>
-.main { background-color: #f4f6f9; }
-.quiz-card {
-    background: white;
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0px 4px 12px rgba(0,0,0,0.08);
-}
-.stButton>button {
-    background-color: #1f4e79;
-    color: white;
-    border-radius: 8px;
-    padding: 10px 18px;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
 
 st.title("🎓 Cloud Basics & Infrastructure Quiz")
 
@@ -76,8 +54,7 @@ def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
     df = pd.read_excel("questions.xlsx", header=1)
     os.remove("questions.xlsx")
-
-    df = df.sample(frac=1).reset_index(drop=True)  # Shuffle
+    df.columns = df.columns.str.strip()
     return df
 
 def load_progress():
@@ -101,30 +78,44 @@ def generate_cert_id(regno, score):
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 def generate_certificate(student, score, cert_id):
+
     file_name = f"{student['RegNo']}_certificate.pdf"
+
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    pdf.set_font("Arial", "B", 24)
-    pdf.cell(0, 30, "CERTIFICATE OF COMPLETION", ln=True, align="C")
+    # Background Image
+    if os.path.exists("certificate_bg.png"):
+        pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    pdf.set_font("Arial", "", 18)
-    pdf.cell(0, 20, f"{student['Name']} ({student['RegNo']})", ln=True, align="C")
-    pdf.cell(0, 15, f"Score: {score} / 50", ln=True, align="C")
+    pdf.set_font("Arial", "B", 26)
+    pdf.set_xy(0, 80)
+    pdf.cell(297, 10, "CERTIFICATE OF COMPLETION", align="C")
 
-    pdf.cell(0, 15, f"Date: {datetime.today().strftime('%d-%m-%Y')}", ln=True, align="C")
-    pdf.cell(0, 15, f"Certificate ID: {cert_id}", ln=True, align="C")
+    pdf.set_font("Arial", "", 20)
+    pdf.set_xy(0, 100)
+    pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
 
+    pdf.set_xy(0, 115)
+    pdf.cell(297, 10, f"Score: {score} / 50", align="C")
+
+    pdf.set_xy(0, 130)
+    pdf.cell(297, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="C")
+
+    pdf.set_xy(0, 145)
+    pdf.cell(297, 10, f"Certificate ID: {cert_id}", align="C")
+
+    # QR
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
-    pdf.image("qr.png", x=130, y=120, w=40)
+    pdf.image("qr.png", x=20, y=150, w=35)
     os.remove("qr.png")
 
     pdf.output(file_name)
     return file_name
 
-# ================= VERIFY MODE =================
+# ================= VERIFY =================
 
 query_params = st.query_params
 progress = load_progress()
@@ -143,7 +134,7 @@ if "verify" in query_params:
 # ================= LOGIN =================
 
 students = load_students()
-questions = load_questions()
+questions_master = load_questions()
 
 st.subheader("🔐 Student Login")
 reg_input = st.text_input("Enter Register Number")
@@ -165,7 +156,7 @@ if "student" in st.session_state:
     student = st.session_state.student
     regno = student["RegNo"]
 
-    # If already attempted
+    # Already completed
     if regno in progress:
         st.success("🎓 Exam Already Completed")
 
@@ -177,11 +168,15 @@ if "student" in st.session_state:
 
         st.stop()
 
-    # Initialize quiz state
-    if "current_q" not in st.session_state:
+    # Shuffle ONCE per attempt
+    if "questions" not in st.session_state:
+        st.session_state.questions = questions_master.sample(frac=1).reset_index(drop=True)
         st.session_state.current_q = 0
         st.session_state.answers = {}
         st.session_state.start_time = time.time()
+
+    questions = st.session_state.questions
+    total_q = len(questions)
 
     # Timer
     elapsed = int(time.time() - st.session_state.start_time)
@@ -196,11 +191,9 @@ if "student" in st.session_state:
         st.warning(f"⏳ Time Remaining: {mins:02d}:{secs:02d}")
         submit = False
 
-    total_q = len(questions)
     q_index = st.session_state.current_q
     question = questions.iloc[q_index]
 
-    st.markdown('<div class="quiz-card">', unsafe_allow_html=True)
     st.markdown(f"### Question {q_index+1} of {total_q}")
     st.write(question.iloc[0])
 
@@ -215,7 +208,6 @@ if "student" in st.session_state:
         index=None,
         key=f"q_{q_index}"
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
@@ -231,7 +223,7 @@ if "student" in st.session_state:
             st.session_state.answers[q_index] = option
         submit = True
 
-    # Submit Logic
+    # Submit
     if submit:
         correct = 0
         for i in range(total_q):
@@ -257,7 +249,7 @@ if "student" in st.session_state:
             st.download_button("⬇ Download Certificate", f, file_name=file)
 
         # Clear session
-        for key in ["current_q", "answers", "start_time"]:
+        for key in ["questions", "current_q", "answers", "start_time"]:
             if key in st.session_state:
                 del st.session_state[key]
 
