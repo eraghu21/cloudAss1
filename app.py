@@ -57,13 +57,29 @@ def load_questions():
     return df
 
 def load_progress():
-    if os.path.exists("progress.enc"):
+
+    if not os.path.exists("progress.enc"):
+        return {}
+
+    try:
         pyAesCrypt.decryptFile("progress.enc", "progress.json", PASSWORD, bufferSize)
+
+        # If file size is 0 → return empty
+        if os.path.getsize("progress.json") == 0:
+            os.remove("progress.json")
+            return {}
+
         with open("progress.json", "r") as f:
             data = json.load(f)
+
         os.remove("progress.json")
         return data
-    return {}
+
+    except Exception:
+        # If corrupted → reset safely
+        if os.path.exists("progress.json"):
+            os.remove("progress.json")
+        return {}
 
 def save_progress(data):
     with open("progress.json", "w") as f:
