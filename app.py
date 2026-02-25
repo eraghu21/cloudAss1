@@ -92,6 +92,12 @@ def generate_certificate(student, score, cert_id):
     pdf.set_font("Arial", "", 20)
     pdf.set_xy(0, 100)
     pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
+
+     # ---------------- DEPT - YEAR - SEC ----------------
+    pdf.set_font("Arial", "", 18)
+    pdf.set_xy(0, 110)
+    pdf.cell(297, 10, f"{sec} -  {year} -  {dept}", align="C")
+
     
     # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
     circle_x = 235   # horizontal position
@@ -107,8 +113,7 @@ def generate_certificate(student, score, cert_id):
     pdf.set_xy(circle_x, circle_y + 8)
     pdf.cell(radius, 10, f"{score}/50", align="C")
 
-    pdf.set_xy(0, 115)
-    pdf.cell(297, 10, f"Score: {score} / 50", align="C")
+    
     pdf.set_font("Arial", "", 10)
     pdf.set_xy(80, 175)
     pdf.cell(297, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="C")
