@@ -21,50 +21,68 @@ QUIZ_DURATION = 1500  # 25 minutes
 st.set_page_config(page_title="Secure Quiz System", page_icon="🎓", layout="centered")
 st.title("🎓 Cloud Basics & Infrastructure Quiz")
 
-# ================= ENCRYPT / DECRYPT =================
+# ================= SAFE DECRYPT =================
 
 def decrypt_file(enc_file, output_file):
+    if not os.path.exists(enc_file):
+        st.error(f"{enc_file} not found.")
+        st.stop()
     pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
 
-def encrypt_progress():
-    pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
-    os.remove("progress.json")
-
-# ================= LOAD DATA =================
+# ================= LOAD STUDENTS =================
 
 def load_students():
-    decrypt_file("students.xlsx.enc", "students.xlsx")
-    df = pd.read_excel("students.xlsx", header=1)
-    os.remove("students.xlsx")
+    try:
+        decrypt_file("students.xlsx.enc", "students.xlsx")
+        df = pd.read_excel("students.xlsx", header=1)
+        os.remove("students.xlsx")
 
-    df.columns = df.columns.str.strip()
-    df = df.rename(columns={
-        df.columns[0]: "RegNo",
-        df.columns[1]: "Name",
-        df.columns[2]: "Dept",
-        df.columns[3]: "Year",
-        df.columns[4]: "Section"
-    })
+        df.columns = df.columns.str.strip()
 
-    df["RegNo"] = df["RegNo"].astype(str).str.replace(".0", "", regex=False).str.strip()
-    return df
+        df = df.rename(columns={
+            df.columns[0]: "RegNo",
+            df.columns[1]: "Name",
+            df.columns[2]: "Dept",
+            df.columns[3]: "Year",
+            df.columns[4]: "Section"
+        })
+
+        df["RegNo"] = df["RegNo"].astype(str).str.replace(".0", "", regex=False).str.strip()
+        return df
+
+    except Exception:
+        st.error("Error loading students file.")
+        st.stop()
+
+# ================= LOAD QUESTIONS =================
 
 def load_questions():
-    decrypt_file("questions.xlsx.enc", "questions.xlsx")
-    df = pd.read_excel("questions.xlsx", header=1)
-    os.remove("questions.xlsx")
-    df.columns = df.columns.str.strip()
-    return df
+    try:
+        decrypt_file("questions.xlsx.enc", "questions.xlsx")
+        df = pd.read_excel("questions.xlsx", header=1)
+        os.remove("questions.xlsx")
+
+        df.columns = df.columns.str.strip()
+
+        if len(df.columns) < 5:
+            st.error("Questions file format incorrect.")
+            st.stop()
+
+        return df
+
+    except Exception:
+        st.error("Error loading questions file.")
+        st.stop()
+
+# ================= PROGRESS =================
 
 def load_progress():
-
     if not os.path.exists("progress.enc"):
         return {}
 
     try:
         pyAesCrypt.decryptFile("progress.enc", "progress.json", PASSWORD, bufferSize)
 
-        # If file size is 0 → return empty
         if os.path.getsize("progress.json") == 0:
             os.remove("progress.json")
             return {}
@@ -75,8 +93,7 @@ def load_progress():
         os.remove("progress.json")
         return data
 
-    except Exception:
-        # If corrupted → reset safely
+    except:
         if os.path.exists("progress.json"):
             os.remove("progress.json")
         return {}
@@ -84,21 +101,24 @@ def load_progress():
 def save_progress(data):
     with open("progress.json", "w") as f:
         json.dump(data, f)
-    encrypt_progress()
 
-# ================= CERTIFICATE =================
+    pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
+    os.remove("progress.json")
+
+# ================= CERTIFICATE (UNCHANGED) =================
 
 def generate_cert_id(regno, score):
     raw = f"{regno}-{score}-SECUREKEY"
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 def generate_certificate(student, score, cert_id):
+
     file_name = f"{student['RegNo']}_certificate.pdf"
 
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background
+    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
@@ -108,17 +128,15 @@ def generate_certificate(student, score, cert_id):
 
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
-    pdf.cell(
-        297,
-        10,
-        f"{student['Section']} - {student['Year']} - {student['Dept']}",
-        align="C"
-    )
+    pdf.cell(297, 10,
+             f"{student['Section']} - {student['Year']} - {student['Dept']}",
+             align="C")
 
     # Score Circle
     circle_x = 235
     circle_y = 85
     radius = 25
+
     pdf.set_line_width(1.5)
     pdf.ellipse(circle_x, circle_y, radius, radius)
 
@@ -142,26 +160,28 @@ def generate_certificate(student, score, cert_id):
     pdf.output(file_name)
     return file_name
 
-# ================= VERIFY =================
+# ================= INITIAL LOAD =================
 
+students = load_students()
+questions_master = load_questions()
 progress = load_progress()
-query_params = st.query_params
 
-if "verify" in query_params:
-    cert_id = query_params["verify"]
+# ================= VERIFY MODE =================
+
+if "verify" in st.query_params:
+    cert_id = st.query_params["verify"]
+
     for reg, data in progress.items():
         if data["cert_id"] == cert_id:
             st.success("Certificate Verified ✅")
             st.write("Register No:", reg)
             st.write("Score:", data["score"], "/ 50")
             st.stop()
+
     st.error("Invalid Certificate ❌")
     st.stop()
 
 # ================= LOGIN =================
-
-students = load_students()
-questions_master = load_questions()
 
 st.subheader("🔐 Student Login")
 reg_input = st.text_input("Enter Register Number")
@@ -176,7 +196,7 @@ if st.button("Login"):
         st.session_state.student = student_df.iloc[0].to_dict()
         st.success("Login Successful")
 
-# ================= AFTER LOGIN =================
+# ================= QUIZ =================
 
 if "student" in st.session_state:
 
@@ -195,20 +215,14 @@ if "student" in st.session_state:
         file = generate_certificate(student, saved_score, cert_id)
 
         with open(file, "rb") as f:
-            st.download_button(
-                "⬇ Download Your Certificate",
-                f,
-                file_name=file,
-                use_container_width=True
-            )
+            st.download_button("⬇ Download Your Certificate", f, file_name=file)
 
         st.stop()
 
-    # Initialize first attempt
+    # Initialize attempt
     if "questions" not in st.session_state:
         st.session_state.questions = questions_master.sample(frac=1).reset_index(drop=True)
         st.session_state.current_q = 0
-        st.session_state.answers = {}
         st.session_state.start_time = time.time()
 
     questions = st.session_state.questions
@@ -224,9 +238,7 @@ if "student" in st.session_state:
         st.error("⏰ Time Up! Submitting...")
         submit = True
     else:
-        mins = remaining // 60
-        secs = remaining % 60
-        st.warning(f"⏳ Time Remaining: {mins:02d}:{secs:02d}")
+        st.warning(f"⏳ Time Remaining: {remaining//60:02d}:{remaining%60:02d}")
 
     q_index = st.session_state.current_q
     question = questions.iloc[q_index]
@@ -236,7 +248,8 @@ if "student" in st.session_state:
 
     option = st.radio(
         "Select your answer:",
-        [question.iloc[1], question.iloc[2], question.iloc[3], question.iloc[4]],
+        [question.iloc[1], question.iloc[2],
+         question.iloc[3], question.iloc[4]],
         index=None,
         key=f"q_{q_index}"
     )
@@ -244,18 +257,19 @@ if "student" in st.session_state:
     col1, col2 = st.columns(2)
 
     if col1.button("Next ➡") and option:
-        st.session_state.answers[q_index] = option
         if q_index < total_q - 1:
             st.session_state.current_q += 1
         else:
             submit = True
 
     if col2.button("Submit Exam"):
-        if option:
-            st.session_state.answers[q_index] = option
         submit = True
 
+    # ================= FINAL SUBMIT =================
+
     if submit:
+
+        # 🎯 RANDOM MARKS 45-50
         score = random.randint(45, 50)
 
         cert_id = generate_cert_id(regno, score)
@@ -273,9 +287,5 @@ if "student" in st.session_state:
 
         with open(file, "rb") as f:
             st.download_button("⬇ Download Certificate", f, file_name=file)
-
-        for key in ["questions", "current_q", "answers", "start_time"]:
-            if key in st.session_state:
-                del st.session_state[key]
 
         st.stop()
