@@ -19,8 +19,10 @@ st.set_page_config(page_title="Secure Quiz System", page_icon="🎓")
 # ================= ENCRYPT / DECRYPT =================
 
 def decrypt_file(enc_file, output_file):
-    if os.path.exists(enc_file):
-        pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
+    if not os.path.exists(enc_file):
+        st.error(f"{enc_file} not found.")
+        st.stop()
+    pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
 
 def encrypt_progress():
     pyAesCrypt.encryptFile("progress.json", "progress.enc", PASSWORD, bufferSize)
@@ -30,23 +32,30 @@ def encrypt_progress():
 
 def load_students():
     decrypt_file("students.xlsx.enc", "students.xlsx")
-    df = pd.read_excel("students.xlsx")
-    df.columns = df.columns.str.strip()
+
+    # IMPORTANT: Header is in 2nd row
+    df = pd.read_excel("students.xlsx", header=1)
+
     os.remove("students.xlsx")
 
-    # Normalize column names
     df.columns = df.columns.str.strip()
 
-    # Force correct naming
+    # Rename properly
     df = df.rename(columns={
-        df.columns[0]: "Name",
-        df.columns[1]: "RegNo",
+        df.columns[0]: "RegNo",
+        df.columns[1]: "Name",
         df.columns[2]: "Dept",
         df.columns[3]: "Year",
         df.columns[4]: "Section"
     })
 
-    df["RegNo"] = df["RegNo"].astype(str).str.strip()
+    # Remove .0 problem
+    df["RegNo"] = (
+        df["RegNo"]
+        .astype(str)
+        .str.replace(".0", "", regex=False)
+        .str.strip()
+    )
 
     return df
 
@@ -54,10 +63,9 @@ def load_students():
 
 def load_questions():
     decrypt_file("questions.xlsx.enc", "questions.xlsx")
-    df = pd.read_excel("questions.xlsx")
+    df = pd.read_excel("questions.xlsx", header=1)
     df.columns = df.columns.str.strip()
     os.remove("questions.xlsx")
-
     return df
 
 # ================= LOAD PROGRESS =================
@@ -97,7 +105,6 @@ def generate_certificate(student, score, total, cert_id):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
@@ -109,7 +116,6 @@ def generate_certificate(student, score, total, cert_id):
     pdf.set_xy(0, 110)
     pdf.cell(297, 10, f"{section} - {year} - {dept}", align="C")
 
-    # Score Circle
     circle_x = 235
     circle_y = 75
     radius = 40
@@ -121,16 +127,14 @@ def generate_certificate(student, score, total, cert_id):
     pdf.set_xy(circle_x, circle_y + 12)
     pdf.cell(radius, 10, f"{score}/{total}", align="C")
 
-    # Date
     pdf.set_font("Arial", "", 12)
     pdf.set_xy(200, 180)
     pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}")
 
-    # Certificate ID
     pdf.set_xy(100, 180)
     pdf.cell(80, 10, f"Certificate ID: {cert_id}")
 
-    # QR Code
+    # QR
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
@@ -171,7 +175,7 @@ regno_input = st.text_input("Enter Register Number")
 
 if st.button("Login"):
 
-    regno_clean = regno_input.strip()
+    regno_clean = regno_input.strip().replace(".0", "")
 
     student_df = students[students["RegNo"] == regno_clean]
 
