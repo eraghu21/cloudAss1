@@ -96,7 +96,7 @@ def generate_certificate(student, score, cert_id):
      # ---------------- DEPT - YEAR - SEC ----------------
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
-    pdf.cell(297, 10, f"{sec} -  {year} -  {dept}", align="C")
+    pdf.cell(297, 10, f"{Section} -  {year} -  {Dept}", align="C")
 
     
     # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
