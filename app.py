@@ -82,6 +82,7 @@ def generate_certificate(student, score, cert_id):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
+    # Background
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
@@ -91,15 +92,17 @@ def generate_certificate(student, score, cert_id):
 
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
-    pdf.cell(297, 10,
-             f"{student['Section']} - {student['Year']} - {student['Dept']}",
-             align="C")
+    pdf.cell(
+        297,
+        10,
+        f"{student['Section']} - {student['Year']} - {student['Dept']}",
+        align="C"
+    )
 
     # Score Circle
     circle_x = 235
     circle_y = 85
     radius = 25
-
     pdf.set_line_width(1.5)
     pdf.ellipse(circle_x, circle_y, radius, radius)
 
@@ -166,16 +169,26 @@ if "student" in st.session_state:
 
     # 🚫 BLOCK SECOND ATTEMPT
     if regno in progress:
-        st.success("🎓 You have already completed the exam.")
+
+        st.error("⚠️ You have already submitted the exam.")
+        st.info("📥 Please download your certificate below.")
+
         cert_id = progress[regno]["cert_id"]
-        file = generate_certificate(student, progress[regno]["score"], cert_id)
+        saved_score = progress[regno]["score"]
+
+        file = generate_certificate(student, saved_score, cert_id)
 
         with open(file, "rb") as f:
-            st.download_button("⬇ Download Certificate", f, file_name=file)
+            st.download_button(
+                "⬇ Download Your Certificate",
+                f,
+                file_name=file,
+                use_container_width=True
+            )
 
         st.stop()
 
-    # Initialize
+    # Initialize first attempt
     if "questions" not in st.session_state:
         st.session_state.questions = questions_master.sample(frac=1).reset_index(drop=True)
         st.session_state.current_q = 0
@@ -185,7 +198,7 @@ if "student" in st.session_state:
     questions = st.session_state.questions
     total_q = len(questions)
 
-    submit = False  # 🔥 FIXED
+    submit = False
 
     # Timer
     elapsed = int(time.time() - st.session_state.start_time)
@@ -226,7 +239,6 @@ if "student" in st.session_state:
             st.session_state.answers[q_index] = option
         submit = True
 
-    # ✅ SUBMIT BLOCK INSIDE
     if submit:
         score = random.randint(45, 50)
 
@@ -246,7 +258,6 @@ if "student" in st.session_state:
         with open(file, "rb") as f:
             st.download_button("⬇ Download Certificate", f, file_name=file)
 
-        # Clear session
         for key in ["questions", "current_q", "answers", "start_time"]:
             if key in st.session_state:
                 del st.session_state[key]
