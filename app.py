@@ -124,6 +124,7 @@ def generate_certificate(student, score, cert_id):
     pdf.cell(297, 10, f"Certificate ID: {cert_id}", align="C")
 
     # QR
+    pdf.set_xy(10,100)
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
