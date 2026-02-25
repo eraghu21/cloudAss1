@@ -93,7 +93,20 @@ def generate_certificate(student, score, cert_id):
     pdf.set_xy(0, 100)
     pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
     
-        
+    # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
+    circle_x = 235   # horizontal position
+    circle_y = 85    # vertical position
+    radius = 25
+
+    # Draw Circle
+    pdf.set_line_width(1.5)
+    pdf.ellipse(circle_x, circle_y, radius, radius)
+
+    # Score Text inside circle
+    pdf.set_font("Arial", "B", 20)
+    pdf.set_xy(circle_x, circle_y + 8)
+    pdf.cell(radius, 10, f"{score}/50", align="C")
+
     pdf.set_xy(0, 115)
     pdf.cell(297, 10, f"Score: {score} / 50", align="C")
     pdf.set_font("Arial", "", 10)
