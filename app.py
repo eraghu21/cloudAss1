@@ -243,8 +243,7 @@ if "student" in st.session_state:
         submit = True
 
     # Submit
-   # Submit
-if submit:
+   if submit:
 
     # Random score between 45 and 50
     score = random.randint(45, 50)
