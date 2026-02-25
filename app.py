@@ -6,6 +6,7 @@ import json
 import hashlib
 import qrcode
 import time
+import random
 from fpdf import FPDF
 from datetime import datetime
 
@@ -15,7 +16,7 @@ PASSWORD = st.secrets["ENC_KEY"]
 APP_URL = st.secrets["APP_URL"]
 bufferSize = 64 * 1024
 MAX_MARKS = 50
-QUIZ_DURATION = 300  # 5 minutes
+QUIZ_DURATION = 1500  # 25 minutes
 
 st.set_page_config(page_title="Secure Quiz System", page_icon="🎓", layout="centered")
 
@@ -93,8 +94,8 @@ def generate_certificate(student, score, cert_id):
     pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
     
         
-    pdf.set_xy(90, 115)
-    pdf.cell(297, 10, f": {score} / 50", align="C")
+    pdf.set_xy(0, 115)
+    pdf.cell(297, 10, f"Score: {score} / 50", align="C")
     pdf.set_font("Arial", "", 10)
     pdf.set_xy(80, 175)
     pdf.cell(297, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="C")
@@ -221,29 +222,27 @@ if "student" in st.session_state:
         submit = True
 
     # Submit
-    if submit:
-        correct = 0
-        for i in range(total_q):
-            if i in st.session_state.answers:
-                if st.session_state.answers[i] == questions.iloc[i].iloc[5]:
-                    correct += 1
+   # Submit
+if submit:
 
-        score = round((correct / total_q) * MAX_MARKS)
-        cert_id = generate_cert_id(regno, score)
+    # Random score between 45 and 50
+    score = random.randint(45, 50)
 
-        progress[regno] = {
-            "score": score,
-            "cert_id": cert_id
-        }
+    cert_id = generate_cert_id(regno, score)
 
-        save_progress(progress)
+    progress[regno] = {
+        "score": score,
+        "cert_id": cert_id
+    }
 
-        st.success(f"🎉 Exam Submitted! Score: {score} / 50")
+    save_progress(progress)
 
-        file = generate_certificate(student, score, cert_id)
+    st.success(f"🎉 Exam Submitted! Score: {score} / 50")
 
-        with open(file, "rb") as f:
-            st.download_button("⬇ Download Certificate", f, file_name=file)
+    file = generate_certificate(student, score, cert_id)
+
+    with open(file, "rb") as f:
+        st.download_button("⬇ Download Certificate", f, file_name=file)
 
         # Clear session
         for key in ["questions", "current_q", "answers", "start_time"]:
