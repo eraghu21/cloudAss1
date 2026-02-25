@@ -88,45 +88,24 @@ def generate_certificate(student, score, cert_id):
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
-    # ---------------- NAME + REGNO ----------------
-    pdf.set_font("Arial", "B", 18)
+    pdf.set_font("Arial", "", 20)
     pdf.set_xy(0, 100)
-    pdf.cell(297, 10, f"{regno} ({name})", align="C")
+    pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
 
-    # ---------------- DEPT - YEAR - SEC ----------------
-    pdf.set_font("Arial", "", 18)
-    pdf.set_xy(0, 110)
-    pdf.cell(297, 10, f"{sec} -  {year} -  {dept}", align="C")
+    pdf.set_xy(90, 115)
+    pdf.cell(297, 10, f": {score} / 50", align="C")
+    pdf.set_font("Arial", "", 10)
+    pdf.set_xy(80, 170)
+    pdf.cell(297, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="C")
+ 
+    pdf.set_xy(40, 170)
+    pdf.cell(297, 10, f"Certificate ID: {cert_id}", align="C")
 
-    # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
-    circle_x = 235   # horizontal position
-    circle_y = 85    # vertical position
-    radius = 25
-
-    # Draw Circle
-    pdf.set_line_width(1.5)
-    pdf.ellipse(circle_x, circle_y, radius, radius)
-
-    # Score Text inside circle
-    pdf.set_font("Arial", "B", 20)
-    pdf.set_xy(circle_x, circle_y + 8)
-    pdf.cell(radius, 10, f"{score}/{total}", align="C")
-
-    # ---------------- DATE ----------------
-    pdf.set_font("Arial", "", 12)
-    pdf.set_xy(135, 177)
-    pdf.cell(80, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="R")
-
-    # ---------------- CERTIFICATE ID ----------------
-    pdf.set_xy(100, 177)
-    pdf.cell(80, 10, f"Certificate ID: {cert_id}")
-
-    # ---------------- QR CODE ----------------
+    # QR
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
-
-    pdf.image("qr.png", x=20, y=80, w=35)
+    pdf.image("qr.png", x=20, y=150, w=35)
     os.remove("qr.png")
 
     pdf.output(file_name)
