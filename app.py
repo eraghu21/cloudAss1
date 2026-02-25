@@ -92,13 +92,13 @@ def generate_certificate(student, score, cert_id):
     pdf.set_xy(0, 100)
     pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
 
-    pdf.set_xy(60, 115)
+    pdf.set_xy(90, 115)
     pdf.cell(297, 10, f": {score} / 50", align="C")
     pdf.set_font("Arial", "", 10)
-    pdf.set_xy(80, 180)
+    pdf.set_xy(80, 170)
     pdf.cell(297, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="C")
  
-    pdf.set_xy(50, 180)
+    pdf.set_xy(40, 170)
     pdf.cell(297, 10, f"Certificate ID: {cert_id}", align="C")
 
     # QR
