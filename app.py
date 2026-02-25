@@ -19,10 +19,9 @@ MAX_MARKS = 50
 QUIZ_DURATION = 1500  # 25 minutes
 
 st.set_page_config(page_title="Secure Quiz System", page_icon="🎓", layout="centered")
-
 st.title("🎓 Cloud Basics & Infrastructure Quiz")
 
-# ================= ENCRYPT/DECRYPT =================
+# ================= ENCRYPT / DECRYPT =================
 
 def decrypt_file(enc_file, output_file):
     pyAesCrypt.decryptFile(enc_file, output_file, PASSWORD, bufferSize)
@@ -39,7 +38,6 @@ def load_students():
     os.remove("students.xlsx")
 
     df.columns = df.columns.str.strip()
-
     df = df.rename(columns={
         df.columns[0]: "RegNo",
         df.columns[1]: "Name",
@@ -79,13 +77,11 @@ def generate_cert_id(regno, score):
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 def generate_certificate(student, score, cert_id):
-
     file_name = f"{student['RegNo']}_certificate.pdf"
 
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
 
-    # Background Image
     if os.path.exists("certificate_bg.png"):
         pdf.image("certificate_bg.png", x=0, y=0, w=297, h=210)
 
@@ -93,38 +89,31 @@ def generate_certificate(student, score, cert_id):
     pdf.set_xy(0, 100)
     pdf.cell(297, 10, f"{student['Name']} ({student['RegNo']})", align="C")
 
-     # ---------------- DEPT - YEAR - SEC ----------------
     pdf.set_font("Arial", "", 18)
     pdf.set_xy(0, 110)
-    pdf.cell(297, 10, 
-         f"{student['Section']} - {student['Year']} - {student['Dept']}", 
-         align="C")
+    pdf.cell(297, 10,
+             f"{student['Section']} - {student['Year']} - {student['Dept']}",
+             align="C")
 
-    
-    # ---------------- ROUND SCORE BADGE (RIGHT SIDE) ----------------
-    circle_x = 235   # horizontal position
-    circle_y = 85    # vertical position
+    # Score Circle
+    circle_x = 235
+    circle_y = 85
     radius = 25
 
-    # Draw Circle
     pdf.set_line_width(1.5)
     pdf.ellipse(circle_x, circle_y, radius, radius)
 
-    # Score Text inside circle
     pdf.set_font("Arial", "B", 20)
     pdf.set_xy(circle_x, circle_y + 8)
     pdf.cell(radius, 10, f"{score}/50", align="C")
 
-    
     pdf.set_font("Arial", "", 10)
     pdf.set_xy(80, 175)
     pdf.cell(297, 10, f"Date: {datetime.today().strftime('%d-%m-%Y')}", align="C")
- 
+
     pdf.set_xy(40, 175)
     pdf.cell(297, 10, f"Certificate ID: {cert_id}", align="C")
 
-    # QR
-    pdf.set_xy(10,100)
     qr_link = f"{APP_URL}?verify={cert_id}"
     qr = qrcode.make(qr_link)
     qr.save("qr.png")
@@ -136,8 +125,8 @@ def generate_certificate(student, score, cert_id):
 
 # ================= VERIFY =================
 
-query_params = st.query_params
 progress = load_progress()
+query_params = st.query_params
 
 if "verify" in query_params:
     cert_id = query_params["verify"]
@@ -175,10 +164,9 @@ if "student" in st.session_state:
     student = st.session_state.student
     regno = student["RegNo"]
 
-    # Already completed
+    # 🚫 BLOCK SECOND ATTEMPT
     if regno in progress:
-        st.success("🎓 Exam Already Completed")
-
+        st.success("🎓 You have already completed the exam.")
         cert_id = progress[regno]["cert_id"]
         file = generate_certificate(student, progress[regno]["score"], cert_id)
 
@@ -187,7 +175,7 @@ if "student" in st.session_state:
 
         st.stop()
 
-    # Shuffle ONCE per attempt
+    # Initialize
     if "questions" not in st.session_state:
         st.session_state.questions = questions_master.sample(frac=1).reset_index(drop=True)
         st.session_state.current_q = 0
@@ -196,6 +184,8 @@ if "student" in st.session_state:
 
     questions = st.session_state.questions
     total_q = len(questions)
+
+    submit = False  # 🔥 FIXED
 
     # Timer
     elapsed = int(time.time() - st.session_state.start_time)
@@ -208,7 +198,6 @@ if "student" in st.session_state:
         mins = remaining // 60
         secs = remaining % 60
         st.warning(f"⏳ Time Remaining: {mins:02d}:{secs:02d}")
-        submit = False
 
     q_index = st.session_state.current_q
     question = questions.iloc[q_index]
@@ -218,12 +207,7 @@ if "student" in st.session_state:
 
     option = st.radio(
         "Select your answer:",
-        [
-            question.iloc[1],
-            question.iloc[2],
-            question.iloc[3],
-            question.iloc[4]
-        ],
+        [question.iloc[1], question.iloc[2], question.iloc[3], question.iloc[4]],
         index=None,
         key=f"q_{q_index}"
     )
@@ -242,27 +226,25 @@ if "student" in st.session_state:
             st.session_state.answers[q_index] = option
         submit = True
 
-    # Submit
-if submit:
+    # ✅ SUBMIT BLOCK INSIDE
+    if submit:
+        score = random.randint(45, 50)
 
-    # Random score between 45 and 50
-    score = random.randint(45, 50)
+        cert_id = generate_cert_id(regno, score)
 
-    cert_id = generate_cert_id(regno, score)
+        progress[regno] = {
+            "score": score,
+            "cert_id": cert_id
+        }
 
-    progress[regno] = {
-        "score": score,
-        "cert_id": cert_id
-    }
+        save_progress(progress)
 
-    save_progress(progress)
+        st.success(f"🎉 Exam Submitted! Score: {score} / 50")
 
-    st.success(f"🎉 Exam Submitted! Score: {score} / 50")
+        file = generate_certificate(student, score, cert_id)
 
-    file = generate_certificate(student, score, cert_id)
-
-    with open(file, "rb") as f:
-        st.download_button("⬇ Download Certificate", f, file_name=file)
+        with open(file, "rb") as f:
+            st.download_button("⬇ Download Certificate", f, file_name=file)
 
         # Clear session
         for key in ["questions", "current_q", "answers", "start_time"]:
